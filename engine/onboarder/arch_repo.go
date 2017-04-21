@@ -39,42 +39,6 @@ func (rs *RepoServer) NewArchRepo(repo *github.Repository, client *github.Client
 	}
 }
 
-// TODO: This method will place the desired model(s) for a given repository ID
-//       into the respective field e.g.:
-//       (h.Hive.Models = append(h.Hive.Models, exampleModel))
-//       Additionally, this method will need to be able to properly call in the
-//       necessary logic for defining how each model(s) is trained (although it
-//       is quite likely that they will all train on all available information
-//       which will be filtered down by the conflation scenarios).
-func (rs *RepoServer) initModels(id int) {
-
-}
-
-/*
-// TODO: This method will need to change substantially in the switch to gob.
-func (rs *RepoServer) InitArchRepos(path ...string) {
-	defer h.CloseDB()
-	h.OpenDB()
-	if path == nil {
-		// tokens, err := h.Database.retrieveBulk()
-		// if err != nil {
-        //
-		// }
-	} else {
-
-	}
-
-	// TODO:
-	// if string is nil
-	// - default to opening the storage.db file
-	// - load in info from file
-	// - boot up models / repos via that information
-	// else
-	// - open the provided file
-	// - boot up from those specifications
-}
-*/
-
 // TODO:
 // Below are several potential helper methods for the ArchRepo:
 // BootstrapModel() - performs preliminary training / assignments / startup
