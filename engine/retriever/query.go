@@ -60,7 +60,7 @@ func (d *Database) Read() ([]*github.Issue, error) {
     id := 0
     issues := []*github.Issue{}
     issue := new(github.Issue)
-    userID := sql.NullInt64
+    userID := sql.NullInt64{}
 
     for results.Next() {
         if err := results.Scan(&id, &issue.ID, &issue.Number, &issue.State, &issue.Locked, // NOTE: Issue struct from MemSQL
@@ -75,12 +75,12 @@ func (d *Database) Read() ([]*github.Issue, error) {
                                     &issue.User.Type, &issue.User.SiteAdmin, &issue.User.TotalPrivateRepos,
                                     &issue.User.OwnedPrivateRepos, &issue.User.PrivateGists,
                                     &issue.User.DiskUsage, &issue.User.Collaborators,
-                                    &issue.User.Plan.Name, &issue.User.Plan.Spance, // NOTE: Issue User Plan info
-                                    &issue.User.Plan.Collaborators, &issue.User.Plan.PrivateRepos,
-                                    &issue.User.URL, &issue.User.EventsURL, &issue.User.FollowingURL,
-                                    &issue.User.FollowersURL, &issue.User.GistsURL, &issue.User.OrganizationsURL,
-                                    &issue.User.ReceivedEventsURL, &issue.User.ReposURL, &issue.User.StarredURL,
-                                    &issue.User.SubscriptionsURL,
+                                    &issue.User.Plan.Name, &issue.User.Plan.Space, // NOTE: Issue User Plan info
+                                        &issue.User.Plan.Collaborators, &issue.User.Plan.PrivateRepos,
+                                        &issue.User.URL, &issue.User.EventsURL, &issue.User.FollowingURL,
+                                        &issue.User.FollowersURL, &issue.User.GistsURL, &issue.User.OrganizationsURL,
+                                        &issue.User.ReceivedEventsURL, &issue.User.ReposURL, &issue.User.StarredURL,
+                                        &issue.User.SubscriptionsURL,
                                 &userID, &issue.Assignee.ID, &issue.Assignee.AvatarURL, &issue.Assignee.HTMLURL, // NOTE: Assignee field on Issue struct
                                     &issue.Assignee.GravatarID, &issue.Assignee.Name, &issue.Assignee.Company,
                                     &issue.Assignee.Blog, &issue.Assignee.Location, &issue.Assignee.Email,
@@ -90,12 +90,12 @@ func (d *Database) Read() ([]*github.Issue, error) {
                                     &issue.Assignee.Type, &issue.Assignee.SiteAdmin, &issue.Assignee.TotalPrivateRepos,
                                     &issue.Assignee.OwnedPrivateRepos, &issue.Assignee.PrivateGists,
                                     &issue.Assignee.DiskUsage, &issue.Assignee.Collaborators,
-                                    &issue.Assignee.Plan.Name, &issue.Assignee.Plan.Spance, // NOTE: Issue Assignee Plan info
-                                    &issue.Assignee.Plan.Collaborators, &issue.Assignee.Plan.PrivateRepos,
-                                    &issue.Assignee.URL, &issue.Assignee.EventsURL, &issue.Assignee.FollowingURL,
-                                    &issue.Assignee.FollowersURL, &issue.Assignee.GistsURL, &issue.Assignee.OrganizationsURL,
-                                    &issue.Assignee.ReceivedEventsURL, &issue.Assignee.ReposURL, &issue.Assignee.StarredURL,
-                                    &issue.Assignee.SubscriptionsURL,
+                                    &issue.Assignee.Plan.Name, &issue.Assignee.Plan.Space, // NOTE: Issue Assignee Plan info
+                                        &issue.Assignee.Plan.Collaborators, &issue.Assignee.Plan.PrivateRepos,
+                                        &issue.Assignee.URL, &issue.Assignee.EventsURL, &issue.Assignee.FollowingURL,
+                                        &issue.Assignee.FollowersURL, &issue.Assignee.GistsURL, &issue.Assignee.OrganizationsURL,
+                                        &issue.Assignee.ReceivedEventsURL, &issue.Assignee.ReposURL, &issue.Assignee.StarredURL,
+                                        &issue.Assignee.SubscriptionsURL,
                                 &issue.Comments, &issue.ClosedAt, &issue.CreatedAt, &issue.UpdatedAt, // NOTE: General fields on User
                                 &userID, &issue.ClosedBy.ID, &issue.ClosedBy.AvatarURL, &issue.ClosedBy.HTMLURL, // NOTE: ClosedBy field on Issue struct
                                     &issue.ClosedBy.GravatarID, &issue.ClosedBy.Name, &issue.ClosedBy.Company,
@@ -106,12 +106,12 @@ func (d *Database) Read() ([]*github.Issue, error) {
                                     &issue.ClosedBy.Type, &issue.ClosedBy.SiteAdmin, &issue.ClosedBy.TotalPrivateRepos,
                                     &issue.ClosedBy.OwnedPrivateRepos, &issue.ClosedBy.PrivateGists,
                                     &issue.ClosedBy.DiskUsage, &issue.ClosedBy.Collaborators,
-                                    &issue.ClosedBy.Plan.Name, &issue.ClosedBy.Plan.Spance, // NOTE: Issue ClosedBy Plan info
-                                    &issue.ClosedBy.Plan.Collaborators, &issue.ClosedBy.Plan.PrivateRepos,
-                                    &issue.ClosedBy.URL, &issue.ClosedBy.EventsURL, &issue.ClosedBy.FollowingURL,
-                                    &issue.ClosedBy.FollowersURL, &issue.ClosedBy.GistsURL, &issue.ClosedBy.OrganizationsURL,
-                                    &issue.ClosedBy.ReceivedEventsURL, &issue.ClosedBy.ReposURL, &issue.ClosedBy.StarredURL,
-                                    &issue.ClosedBy.SubscriptionsURL
+                                    &issue.ClosedBy.Plan.Name, &issue.ClosedBy.Plan.Space, // NOTE: Issue ClosedBy Plan info
+                                        &issue.ClosedBy.Plan.Collaborators, &issue.ClosedBy.Plan.PrivateRepos,
+                                        &issue.ClosedBy.URL, &issue.ClosedBy.EventsURL, &issue.ClosedBy.FollowingURL,
+                                        &issue.ClosedBy.FollowersURL, &issue.ClosedBy.GistsURL, &issue.ClosedBy.OrganizationsURL,
+                                        &issue.ClosedBy.ReceivedEventsURL, &issue.ClosedBy.ReposURL, &issue.ClosedBy.StarredURL,
+                                        &issue.ClosedBy.SubscriptionsURL,
                                 &issue.URL, &issue.HTMLURL, // NOTE: Link fields for Issue struct
                                 &issue.Milestone.URL, &issue.Milestone.HTMLURL, &issue.Milestone.LabelsURL, // NOTE: Milestone field on Issue
                                     &issue.Milestone.ID, &issue.Milestone.Number, &issue.Milestone.State,
@@ -125,14 +125,36 @@ func (d *Database) Read() ([]*github.Issue, error) {
                                         &issue.Milestone.Creator.Type, &issue.Milestone.Creator.SiteAdmin, &issue.Milestone.Creator.TotalPrivateRepos,
                                         &issue.Milestone.Creator.OwnedPrivateRepos, &issue.Milestone.Creator.PrivateGists,
                                         &issue.Milestone.Creator.DiskUsage, &issue.Milestone.Creator.Collaborators,
-                                        &issue.Milestone.Creator.Plan.Name, &issue.Milestone.Creator.Plan.Spance, // NOTE: Milestone Creator Plan info
-                                        &issue.Milestone.Creator.Plan.Collaborators, &issue.Milestone.Creator.Plan.PrivateRepos,
-                                        &issue.Milestone.Creator.URL, &issue.Milestone.Creator.EventsURL, &issue.Milestone.Creator.FollowingURL,
-                                        &issue.Milestone.Creator.FollowersURL, &issue.Milestone.Creator.GistsURL, &issue.Milestone.Creator.OrganizationsURL,
-                                        &issue.Milestone.Creator.ReceivedEventsURL, &issue.Milestone.Creator.ReposURL, &issue.Milestone.Creator.StarredURL,
-                                        &issue.Milestone.Creator.SubscriptionsURL,
+                                        &issue.Milestone.Creator.Plan.Name, &issue.Milestone.Creator.Plan.Space, // NOTE: Milestone Creator Plan info
+                                            &issue.Milestone.Creator.Plan.Collaborators, &issue.Milestone.Creator.Plan.PrivateRepos,
+                                            &issue.Milestone.Creator.URL, &issue.Milestone.Creator.EventsURL, &issue.Milestone.Creator.FollowingURL,
+                                            &issue.Milestone.Creator.FollowersURL, &issue.Milestone.Creator.GistsURL, &issue.Milestone.Creator.OrganizationsURL,
+                                            &issue.Milestone.Creator.ReceivedEventsURL, &issue.Milestone.Creator.ReposURL, &issue.Milestone.Creator.StarredURL,
+                                            &issue.Milestone.Creator.SubscriptionsURL,
                                     &issue.Milestone.OpenIssues, &issue.Milestone.ClosedIssues, &issue.Milestone.CreatedAt,
                                     &issue.Milestone.UpdatedAt, &issue.Milestone.ClosedAt, &issue.Milestone.DueOn,
+                                &issue.PullRequestLinks.URL, &issue.PullRequestLinks.HTMLURL, // NOTE: PullRequestLinks struct on Issue
+                                &issue.PullRequestLinks.DiffURL, &issue.PullRequestLinks.PatchURL,
+                                &issue.Repository.ID, // NOTE: Issue struct Repository field
+                                &userID, &issue.Repository.Owner.ID, &issue.Repository.Owner.AvatarURL, &issue.Repository.Owner.HTMLURL, // NOTE: Owner field on Repository struct
+                                    &issue.Repository.Owner.GravatarID, &issue.Repository.Owner.Name, &issue.Repository.Owner.Company,
+                                    &issue.Repository.Owner.Blog, &issue.Repository.Owner.Location, &issue.Repository.Owner.Email,
+                                    &issue.Repository.Owner.Hireable, &issue.Repository.Owner.Bio, &issue.Repository.Owner.PublicRepos,
+                                    &issue.Repository.Owner.PublicGists, &issue.Repository.Owner.Followers, &issue.Repository.Owner.Following,
+                                    &issue.Repository.Owner.CreatedAt, &issue.Repository.Owner.UpdatedAt, &issue.Repository.Owner.SuspendedAt,
+                                    &issue.Repository.Owner.Type, &issue.Repository.Owner.SiteAdmin, &issue.Repository.Owner.TotalPrivateRepos,
+                                    &issue.Repository.Owner.OwnedPrivateRepos, &issue.Repository.Owner.PrivateGists,
+                                    &issue.Repository.Owner.DiskUsage, &issue.Repository.Owner.Collaborators,
+                                    &issue.Repository.Owner.Plan.Name, &issue.Repository.Owner.Plan.Space, // NOTE: Repository Owner Plan info
+                                        &issue.Repository.Owner.Plan.Collaborators, &issue.Repository.Owner.Plan.PrivateRepos,
+                                        &issue.Repository.Owner.URL, &issue.Repository.Owner.EventsURL, &issue.Repository.Owner.FollowingURL,
+                                        &issue.Repository.Owner.FollowersURL, &issue.Repository.Owner.GistsURL, &issue.Repository.Owner.OrganizationsURL,
+                                        &issue.Repository.Owner.ReceivedEventsURL, &issue.Repository.Owner.ReposURL, &issue.Repository.Owner.StarredURL,
+                                        &issue.Repository.Owner.SubscriptionsURL,
+                                    &issue.Repository.Name, &issue.Repository.FullName, &issue.Repository.Description,
+                                    &issue.Repository.Homepage, &issue.Repository.DefaultBranch, &issue.Repository.MasterBranch,
+                                    &issue.Repository.CreatedAt, &issue.Repository.PushedAt, &issue.Repository.UpdatedAt,
+
 
 
         ); err != nil {
