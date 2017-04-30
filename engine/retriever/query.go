@@ -36,9 +36,8 @@ func Timer() {
 
 var issueID = 0
 
-const ISSUE_QUERY = `SELECT * FROM issues WHERE (id > ?);`
+// const ISSUE_QUERY = `SELECT * FROM issues WHERE (id > ?);`
 
-/*
 const ISSUE_QUERY = `
     SELECT * FROM issues
         LEFT JOIN users ON issues.id=users.issue_fk
@@ -51,7 +50,6 @@ const ISSUE_QUERY = `
     WHERE (id > ?);
 `
 // Query: All values for current date starting from current time - 500ms
-*/
 
 // TODO: Build to support a PR query as well.
 func (d *Database) Read() ([]*github.Issue, error) {
@@ -66,14 +64,14 @@ func (d *Database) Read() ([]*github.Issue, error) {
 	issue := new(github.Issue)
 
 	for results.Next() {
-		if err := results.Scan(&id, &issue.ID, &issue.Number, &issue.State,
-			&issue.Locked, &issue.Title, &issue.Body, &issue.Comments,
-			&issue.ClosedAt, &issue.CreatedAt, &issue.UpdatedAt, &issue.URL,
-			&issue.HTMLURL,
-		); err != nil {
-			return nil, err
-		}
-		/*if err := results.Scan(&id, &issue.ID, &issue.Number, &issue.State, &issue.Locked, // NOTE: Issue struct from MemSQL
+		// if err := results.Scan(&id, &issue.ID, &issue.Number, &issue.State,
+        //     &issue.Locked, &issue.Title, &issue.Body, &issue.Comments,
+        //     &issue.ClosedAt, &issue.CreatedAt, &issue.UpdatedAt, &issue.URL,
+        //     &issue.HTMLURL,
+		// ); err != nil {
+		// 	return nil, err
+		// }
+		if err := results.Scan(&id, &issue.ID, &issue.Number, &issue.State, &issue.Locked, // NOTE: Issue struct from MemSQL
 		                              &issue.Title, &issue.Body, &issue.Comments, &issue.ClosedAt,
 		                              &issue.CreatedAt, &issue.UpdatedAt, &issue.URL, &issue.HTMLURL,
 		                          &userID, &issue.User.ID, &issue.User.AvatarURL, &issue.User.HTMLURL, // NOTE: User field on Issue struct
@@ -161,21 +159,28 @@ func (d *Database) Read() ([]*github.Issue, error) {
 		                                  &issue.Repository.Owner.FollowersURL, &issue.Repository.Owner.GistsURL, &issue.Repository.Owner.OrganizationsURL,
 		                                  &issue.Repository.Owner.ReceivedEventsURL, &issue.Repository.Owner.ReposURL, &issue.Repository.Owner.StarredURL,
 		                                  &issue.Repository.Owner.SubscriptionsURL,
-		                              &issue.Repository.Name, &issue.Repository.FullName, &issue.Repository.Description,
+		                              &issue.Repository.Name, &issue.Repository.FullName, &issue.Repository.Description, // NOTE: General Repository fields
 		                              &issue.Repository.Homepage, &issue.Repository.DefaultBranch, &issue.Repository.MasterBranch,
 		                              &issue.Repository.CreatedAt, &issue.Repository.PushedAt, &issue.Repository.UpdatedAt,
 		                              &issue.Repository.HTMLURL, &issue.Repository.CloneURL, &issue.Repository.GitURL,
-		                              &issue.Repository.MirrorURL,
+		                              &issue.Repository.MirrorURL, &issue.Repository.SSHURL, &issue.Repository.SVNURL,
+                                      &issue.Repository.Language, &issue.Repository.Fork, &issue.Repository.ForksCount,
+                                      &issue.Repository.NetworkCount, &issue.Repository.OpenIssuesCount, &issue.Repository.StargazersCount,
+                                      &issue.Repository.SubscribersCount, &issue.Repository.WatchersCount, &issue.Repository.Size,
+                                      &issue.Repository.AutoInit,
+                                      &issue.Organization.Login, &issue.Organization.ID, &issue.Organization.AvatarURL,
+                                      &issue.Organization.HTMLURL, &issue.Organization.Name, &issue.Organization.Company,
+                                      &issue.Organization.Blog, &issue.Organization.Location, &issue.Organization.Email,
+                                      
 
 
-		  ); err != nil {
-		      return nil, err
-		  }*/
+		); err != nil {
+		    return nil, err
+        }
 		issues = append(issues, issue)
 		issueID = *issue.ID
 	}
-	// TODO: Populating entire Issue struct (all 1:1 relationships).
-	// - This requires looking into
+    // TODO: Populating entire Issue struct (all 1:1 relationships).
 
 	return issues, nil
 }
