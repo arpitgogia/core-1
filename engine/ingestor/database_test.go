@@ -19,7 +19,7 @@ func TestInsert(t *testing.T) {
 	db := Database{}
 	db.Open()
 
-	db.BulkInsertIssues(githubIssues, 555)
-	db.BulkInsertPullRequests(githubPulls, 555)
-	db.EnableRepo(555)
+	db.BulkInsertIssues(githubIssues)
+	db.BulkInsertPullRequests(githubPulls)
+	//db.EnableRepo(555)
 }
