@@ -3,6 +3,7 @@ package retriever
 import (
     "database/sql"
     "encoding/json"
+    "fmt" // TEMPORARY
     "time"
 
 	"github.com/google/go-github/github"
@@ -12,62 +13,60 @@ func (d *Database) Timer() {
 	ticker := time.NewTicker(time.Millisecond * 500)
 	go func() {
 		for range ticker.C {
-			// d.Read()
-            // TODO: Wrapper around
+            issues, pullRequests, err := d.Read()
+            if err != nil {
+                fmt.Println(err) // TEMPORARY
+            }
+            fmt.Println(issues) // TEMPORARY
+            fmt.Println(pullRequests) // TEMPORARY
 		}
 	}()
 }
 
 var issueID = 0
 
-const ISSUE_QUERY = `SELECT id, is_closed, is_pr, payload FROM github_events WHERE id > ?`
+const ISSUE_QUERY = `SELECT id, is_pr, payload FROM github_events WHERE id > ?`
 
-func (d *Database) Read() ([]*github.Issue, []*github.Issue, []*github.PullRequest, []*github.PullRequest, error) {
+func (d *Database) Read() ([]*github.Issue, []*github.PullRequest, error) {
 	results, err := d.db.Query(ISSUE_QUERY, issueID)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, err
 	}
 	defer results.Close()
 
-    open_i, closed_i, open_pr, closed_pr, err := translator(results)
+    i, pr, err := translator(results)
     if err != nil {
-        return nil, nil, nil, nil, err
+        return nil, nil, err
     }
-	return open_i, closed_i, open_pr, closed_pr, nil
+	return i, pr, nil
 }
 
-func translator(rows *sql.Rows) (open_i, closed_i []*github.Issue, open_pr, closed_pr []*github.PullRequest, err error) {
+func translator(rows *sql.Rows) ([]*github.Issue, []*github.PullRequest, error) {
+    i_list := []*github.Issue{}
+    pr_list := []*github.PullRequest{}
     for rows.Next() {
-        payload := new(string)
-        is_closed := new(bool)
-        is_pr := new(bool)
         count := new(int)
-        if err = rows.Scan(count, is_closed, is_pr, payload); err != nil {
-            return
+        is_pr := new(bool)
+        payload := new(string)
+        if err := rows.Scan(count, is_pr, payload); err != nil {
+            return nil, nil, err
         }
+        // TODO: Refactor this logic into separate function.
         if !*is_pr {
             i := github.Issue{}
-            if err = json.Unmarshal([]byte(*payload), i); err != nil {
-                return
+            if err := json.Unmarshal([]byte(*payload), i); err != nil {
+                return nil, nil, err
             }
-            if !*is_closed {
-                open_i = append(open_i, &i)
-            } else {
-                closed_i = append(closed_i, &i)
-            }
+            i_list = append(i_list, &i)
             issueID = *count
         } else {
             pr := github.PullRequest{}
-            if err = json.Unmarshal([]byte(*payload), pr); err != nil {
-                return
+            if err := json.Unmarshal([]byte(*payload), pr); err != nil {
+                return nil, nil, err
             }
-            if !*is_closed {
-                open_pr = append(open_pr, &pr)
-            } else {
-                closed_pr = append(closed_pr, &pr)
-            }
+            pr_list = append(pr_list, &pr)
             issueID = *count
         }
     }
-    return
+    return i_list, pr_list, nil
 }
