@@ -3,6 +3,7 @@ package ingestor
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/go-github/github"
@@ -37,7 +38,92 @@ func (d *Database) EnableRepo(repoId int) {
 	fmt.Println(err)
 }
 
-func (d *Database) BulkInsertIssues(issues []*github.Issue, repoId int) {
+func stripCtlAndExtFromBytes(str []byte) []byte {
+	b := make([]byte, len(str))
+	var bl int
+	for i := 0; i < len(str); i++ {
+		c := str[i]
+		if c >= 32 && c < 127 {
+			b[bl] = c
+			bl++
+		}
+	}
+	return b[:bl]
+}
+
+func (d *Database) BulkInsertIssues(issues []*github.Issue) {
+	var buffer bytes.Buffer
+	eventsInsert := "INSERT INTO github_events(payload) VALUES"
+	eventsValuesFmt := "(?)"
+	numValues := 1
+
+	buffer.WriteString(eventsInsert)
+	delimeter := ""
+	values := make([]interface{}, len(issues)*numValues)
+	for i := 0; i < len(issues); i++ {
+		buffer.WriteString(delimeter)
+		buffer.WriteString(eventsValuesFmt)
+
+		offset := i * numValues
+		payload, _ := json.Marshal(*issues[i])
+
+		values[offset+0] = stripCtlAndExtFromBytes(payload)
+
+		delimeter = ","
+	}
+	_, err := d.db.Exec(buffer.String(), values...)
+	fmt.Println(err)
+}
+
+func (d *Database) BulkInsertPullRequests_Old(pulls []*github.PullRequest) {
+	var buffer bytes.Buffer
+	eventsInsert := "INSERT INTO github_events(payload) VALUES"
+
+	buffer.WriteString(eventsInsert)
+	delimeter := ""
+	for i := 0; i < 2; i++ {
+		buffer.WriteString(delimeter)
+
+		buffer.WriteString("(")
+		payload, _ := json.Marshal(*pulls[6568])
+		payload = payload
+		//buffer.Write(stripCtlAndExtFromBytes(payload))
+		buffer.WriteString(`'`)
+		buffer.WriteString(string(stripCtlAndExtFromBytes(payload)))
+		buffer.WriteString(`'`)
+		buffer.WriteString(")")
+
+		delimeter = ","
+	}
+	_, err := d.db.Exec(buffer.String())
+	fmt.Println(err)
+}
+
+func (d *Database) BulkInsertPullRequests(pulls []*github.PullRequest) {
+	var buffer bytes.Buffer
+	eventsInsert := "INSERT INTO github_events(payload) VALUES"
+	eventsValuesFmt := "(?)"
+	numValues := 1
+
+	buffer.WriteString(eventsInsert)
+	delimeter := ""
+	values := make([]interface{}, len(pulls)*numValues) //<6600
+	for i := 0; i < len(pulls); i++ {
+		buffer.WriteString(delimeter)
+		buffer.WriteString(eventsValuesFmt)
+
+		offset := i * numValues
+		payload, _ := json.Marshal(*pulls[i])
+
+		values[offset+0] = stripCtlAndExtFromBytes(payload)
+
+		delimeter = ","
+	}
+	_, err := d.db.Exec(buffer.String(), values...)
+	fmt.Println(err)
+}
+
+func (d *Database) BulkInsertIssues2(issues []*github.Issue, repoId int) {
 	var buffer bytes.Buffer
 	issuesInsert := "INSERT INTO issues(issues_id,number,state,locked,title,body,user_id,comments,closed_at,created_at,updated_at,closed_by,url,html_url,milestone,pull_request_links,repository_id) VALUES"
 	issuesValuesFmt := "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
@@ -115,7 +201,7 @@ func (d *Database) InsertIssue(issue github.Issue) {
 
 }
 
-func (d *Database) BulkInsertPullRequests(pulls []*github.PullRequest, repoId int) {
+func (d *Database) BulkInsertPullRequests2(pulls []*github.PullRequest, repoId int) {
 	var buffer bytes.Buffer
 	pullsInsert := "INSERT INTO pull_requests(pr_id,number,state,title,body,created_at,updated_at,closed_at,merged_at,user_id,merged,mergable,merged_by_user_id,comments,commits,additions,deletions,changed_files,url,html_url,issue_url,statuses_url,diff_url,patch_url,review_comments_url,review_comment_url,assignee_user_id,milestone,maintainer_can_modify,head_pr_branch_id,base_pr_branch_id,repository_id) VALUES"
 	pullsValuesFmt := "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
