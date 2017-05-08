@@ -1,6 +1,7 @@
 package onboarder
 
 import (
+	"coralreefci/engine/gateway/conflation"
 	"coralreefci/models"
 
 	"github.com/google/go-github/github"
@@ -27,9 +28,10 @@ type ArchHive struct {
 }
 
 type ArchRepo struct {
-	Repo   *github.Repository
-	Hive   *ArchHive
-	Client *github.Client
+	Repo      *github.Repository
+	Hive      *ArchHive
+	Client    *github.Client
+	Conflator *conflation.Conflator
 }
 
 func (rs *RepoServer) NewArchRepo(repo *github.Repository, client *github.Client) {
@@ -38,6 +40,8 @@ func (rs *RepoServer) NewArchRepo(repo *github.Repository, client *github.Client
 		Client: client,
 	}
 }
+
+// TODO: Instantiate the Conflator struct on the ArchRepo.
 
 // TODO:
 // Below are several potential helper methods for the ArchRepo:
