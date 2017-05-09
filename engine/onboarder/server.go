@@ -1,21 +1,21 @@
 package onboarder
 
 import (
-	"database/sql"
+	// "database/sql"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/boltdb/bolt"
 
-	// "coralreefci/engine/onboarder"
+	"coralreefci/engine/onboarder/retriever"
 	// "coralreefci/engine/gateway/conflation"
 )
 
 type RepoServer struct {
 	Server       http.Server
 	Repos        map[int]*ArchRepo
-	SQLDatabase  *sql.DB
+	SQLDatabase  *retriever.Database
 	BoltDatabase BoltDB
 }
 
@@ -39,24 +39,14 @@ func (rs *RepoServer) Start() {
 
 func (rs *RepoServer) Stop() {
 	// TODO: Closing the server down is a needed operation that will be added.
-	// NOTE: Does the server need to be a pointer?
 }
 
-func (rs *RepoServer) Timer() {
-	ticker := time.NewTicker(time.Millisecond * 500)
-	go func() {
-		for range ticker.C {
-			// TODO: Stuff goes here.
-		}
-	}()
+func (rs *RepoServer) OpenSQL() {
+    rs.SQLDatabase.Open()
 }
 
-func (rs *RepoServer) OpenSQL() error {
-    return nil
-}
-
-func (rs *RepoServer) CloseSQL() error {
-    return nil
+func (rs *RepoServer) CloseSQL() {
+    rs.SQLDatabase.Close()
 }
 
 func (rs *RepoServer) OpenBolt() error {
@@ -70,4 +60,13 @@ func (rs *RepoServer) OpenBolt() error {
 
 func (rs *RepoServer) CloseBolt() {
 	rs.BoltDatabase.db.Close()
+}
+
+func (rs *RepoServer) Timer() {
+	ticker := time.NewTicker(time.Millisecond * 500)
+	go func() {
+		for range ticker.C {
+			// TODO: Stuff goes here.
+		}
+	}()
 }
