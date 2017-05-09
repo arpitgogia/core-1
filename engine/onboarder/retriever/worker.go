@@ -1,12 +1,12 @@
 package retriever
 
 import (
-    "fmt"
+	"fmt"
 
-    "github.com/google/go-github/github"
+	"github.com/google/go-github/github"
 
-    "coralreefci/engine/gateway/conflation"
-    "coralreefci/models"
+	"coralreefci/engine/gateway/conflation"
+	"coralreefci/models"
 )
 
 type Worker struct {
@@ -38,24 +38,24 @@ func (w *Worker) Start() {
 					// TODO: Call conflate (only on closed issues)
 					// TODO: Remove Printlns
 					// TODO: Call OnlineLearn Method
-                    expandedIssue := conflation.ExpandedIssue{
-                        Issue: conflation.CRIssue{
-                            issue, []int{}, []conflation.CRPullRequest{},
-                        },
-                    }
-                    fmt.Println(expandedIssue)
+					expandedIssue := conflation.ExpandedIssue{
+						Issue: conflation.CRIssue{
+							issue, []int{}, []conflation.CRPullRequest{},
+						},
+					}
+					fmt.Println(expandedIssue)
 				} else {
 					// TODO: Call Predict Method
 					// assignees := w.Models[*issuesEvent.Repo.ID].Algorithm.Predict(expandedIssue)
 					// NOTE: This is likely where the assignment function will be called.
 					// assignment.AssignContributor(assignees[0], issuesEvent, testClient())
 					// HACK: using test client
-                    expandedIssue := conflation.ExpandedIssue{
-                        Issue: conflation.CRIssue{
-                            issue, []int{}, []conflation.CRPullRequest{},
-                        },
-                    }
-                    fmt.Println(expandedIssue)
+					expandedIssue := conflation.ExpandedIssue{
+						Issue: conflation.CRIssue{
+							issue, []int{}, []conflation.CRPullRequest{},
+						},
+					}
+					fmt.Println(expandedIssue)
 				}
 			case <-w.Quit:
 				return
