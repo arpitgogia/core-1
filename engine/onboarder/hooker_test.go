@@ -52,8 +52,8 @@ func TestNewHook(t *testing.T) {
 		ID:    &id,
 	}
 
-	defer testServer.CloseDB()
-	err := testServer.OpenDB()
+	defer testServer.CloseBolt()
+	err := testServer.OpenBolt()
 	if err != nil {
 		t.Error(err) // TODO: Flesh out message
 	}

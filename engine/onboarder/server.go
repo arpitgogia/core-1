@@ -1,19 +1,22 @@
 package onboarder
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/boltdb/bolt"
 
-	"coralreefci/engine/gateway/conflation"
+	// "coralreefci/engine/onboarder"
+	// "coralreefci/engine/gateway/conflation"
 )
 
 type RepoServer struct {
-	Server   http.Server
-	Repos    map[int]*ArchRepo
-	Database BoltDB
+	Server       http.Server
+	Repos        map[int]*ArchRepo
+	SQLDatabase  *sql.DB
+	BoltDatabase BoltDB
 }
 
 func (rs *RepoServer) routes() *http.ServeMux {
@@ -48,15 +51,23 @@ func (rs *RepoServer) Timer() {
 	}()
 }
 
-func (rs *RepoServer) OpenDB() error {
+func (rs *RepoServer) OpenSQL() error {
+    return nil
+}
+
+func (rs *RepoServer) CloseSQL() error {
+    return nil
+}
+
+func (rs *RepoServer) OpenBolt() error {
 	boltDB, err := bolt.Open("storage.db", 0644, nil)
 	if err != nil {
 		return err
 	}
-	rs.Database = BoltDB{db: boltDB}
+	rs.BoltDatabase = BoltDB{db: boltDB}
 	return nil
 }
 
-func (rs *RepoServer) CloseDB() {
-	rs.Database.db.Close()
+func (rs *RepoServer) CloseBolt() {
+	rs.BoltDatabase.db.Close()
 }

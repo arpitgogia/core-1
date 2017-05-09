@@ -1,6 +1,7 @@
 package onboarder
 
 import (
+    "context"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -62,7 +63,7 @@ func (rs *RepoServer) githubCallbackHandler(w http.ResponseWriter, r *http.Reque
 	oaClient := oaConfig.Client(oauth2.NoContext, token)
 	client := github.NewClient(oaClient)
 
-	_, _, err = client.Users.Get("")
+	_, _, err = client.Users.Get(context.Background(), "")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -100,7 +101,7 @@ func (rs *RepoServer) githubCallbackHandler(w http.ResponseWriter, r *http.Reque
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			rs.Database.store(*repo.ID, "token", token)
+			rs.BoltDatabase.store(*repo.ID, "token", token)
 		}
 	}
 	http.Redirect(w, r, "/setup_complete", http.StatusPermanentRedirect)
