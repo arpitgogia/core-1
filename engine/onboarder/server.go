@@ -66,7 +66,8 @@ func (rs *RepoServer) Timer() {
 	ticker := time.NewTicker(time.Millisecond * 500)
 	go func() {
 		for range ticker.C {
-			// TODO: Stuff goes here.
+            // issues, pulls, open := rs.SQLDatabase.Read()
+            // TODO: Implement the rest of the logic here.
 		}
 	}()
 }

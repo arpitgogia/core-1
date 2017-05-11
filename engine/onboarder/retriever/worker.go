@@ -40,7 +40,9 @@ func (w *Worker) Start() {
 					// TODO: Call OnlineLearn Method
 					expandedIssue := conflation.ExpandedIssue{
 						Issue: conflation.CRIssue{
-							issue, []int{}, []conflation.CRPullRequest{},
+							issue,
+							[]int{},
+							[]conflation.CRPullRequest{},
 						},
 					}
 					fmt.Println(expandedIssue)
