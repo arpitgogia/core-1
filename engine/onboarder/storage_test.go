@@ -29,7 +29,7 @@ func Test_open(t *testing.T) {
 			t.Errorf("Error retrieving data from database - expected %v; received %v", testValue, value)
 		}
 	})
-    t.Run("bulk", func(t *testing.T) {
+	t.Run("bulk", func(t *testing.T) {
 		_, err := testServer.BoltDatabase.retrieveBulk()
 		if err != nil {
 			t.Errorf("Error pulling all data from default database: %v", err)

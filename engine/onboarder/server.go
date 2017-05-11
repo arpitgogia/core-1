@@ -42,11 +42,11 @@ func (rs *RepoServer) Stop() {
 }
 
 func (rs *RepoServer) OpenSQL() {
-    rs.SQLDatabase.Open()
+	rs.SQLDatabase.Open()
 }
 
 func (rs *RepoServer) CloseSQL() {
-    rs.SQLDatabase.Close()
+	rs.SQLDatabase.Close()
 }
 
 func (rs *RepoServer) OpenBolt() error {
@@ -66,8 +66,8 @@ func (rs *RepoServer) Timer() {
 	ticker := time.NewTicker(time.Millisecond * 500)
 	go func() {
 		for range ticker.C {
-            // issues, pulls, open := rs.SQLDatabase.Read()
-            // TODO: Implement the rest of the logic here.
+			// issues, pulls, open := rs.SQLDatabase.Read()
+			// TODO: Implement the rest of the logic here.
 		}
 	}()
 }

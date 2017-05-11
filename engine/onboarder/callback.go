@@ -1,7 +1,7 @@
 package onboarder
 
 import (
-    "context"
+	"context"
 	"fmt"
 	"html/template"
 	"net/http"

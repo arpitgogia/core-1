@@ -1,7 +1,7 @@
 package onboarder
 
 import (
-    "context"
+	"context"
 
 	"github.com/google/go-github/github"
 )

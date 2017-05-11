@@ -8,8 +8,8 @@ import (
 )
 
 type ArchModel struct {
-	Model *models.Model
-    Conflator *conflation.Conflator
+	Model     *models.Model
+	Conflator *conflation.Conflator
 	// Benchmark        Benchmark // TODO: Struct to build
 	// Scenarios        []conflation.Scenario
 	// PilotScenarios   []conflation.Scenario
@@ -29,9 +29,9 @@ type ArchHive struct {
 }
 
 type ArchRepo struct {
-	Repo      *github.Repository
-	Hive      *ArchHive
-	Client    *github.Client
+	Repo   *github.Repository
+	Hive   *ArchHive
+	Client *github.Client
 }
 
 func (rs *RepoServer) NewArchRepo(repo *github.Repository, client *github.Client) {

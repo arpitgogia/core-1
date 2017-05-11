@@ -1,9 +1,9 @@
 package onboarder
 
 import (
-    "context"
+	"context"
 
-    "github.com/google/go-github/github"
+	"github.com/google/go-github/github"
 )
 
 func listRepositories(client *github.Client) ([]*github.Repository, error) {
