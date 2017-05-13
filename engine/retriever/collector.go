@@ -9,3 +9,7 @@ func Collector(issues []github.Issue) {
 		Workload <- i
 	}
 }
+
+// NOTE: This particular function will likely need some logic regarding what
+// is passed into it - this will then determine which particular channel the
+// objects are then passed into.
