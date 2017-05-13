@@ -19,6 +19,8 @@ func TestInsert(t *testing.T) {
 	db := Database{}
 	db.Open()
 
+	db.InsertIssue(*githubIssues[0])
+	db.InsertPullRequest(*githubPulls[0])
 	db.BulkInsertIssues(githubIssues)
 	db.BulkInsertPullRequests(githubPulls)
 	//db.EnableRepo(555)
