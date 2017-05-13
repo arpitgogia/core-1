@@ -10,6 +10,10 @@ var issueID = 0
 
 const ISSUE_QUERY = `SELECT id, is_pr, payload FROM github_events WHERE id > ?`
 
+type Reader interface {
+    Read() (map[int][]*github.Issue, map[int][]*github.PullRequest, map[int][]*github.Issue, error)
+}
+
 func (d *Database) Read() (map[int][]*github.Issue, map[int][]*github.PullRequest, map[int][]*github.Issue, error) {
 	results, err := d.db.Query(ISSUE_QUERY, issueID)
 	if err != nil {
