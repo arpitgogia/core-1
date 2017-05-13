@@ -1,9 +1,9 @@
 package retriever
 
 import (
-    "database/sql"
+	"database/sql"
 
-    _ "github.com/go-sql-driver/mysql"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 type Database struct {
