@@ -1,15 +1,14 @@
 package onboarder
 
 import (
-	// "database/sql"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/boltdb/bolt"
+    "github.com/google/go-github/github"
 
 	"coralreefci/engine/onboarder/retriever"
-	// "coralreefci/engine/gateway/conflation"
 )
 
 type RepoServer struct {
@@ -66,8 +65,40 @@ func (rs *RepoServer) Timer() {
 	ticker := time.NewTicker(time.Millisecond * 500)
 	go func() {
 		for range ticker.C {
-			// issues, pulls, open := rs.SQLDatabase.Read()
+			// issues, pulls, open, err := rs.SQLDatabase.Read()
+            // if err != nil {
+            //     // DO SOMETHING HERE
+            // }
+            // rs.Conflate(issues, pulls, open)
 			// TODO: Implement the rest of the logic here.
 		}
 	}()
 }
+
+/*
+func (rs *RepoServer) Conflate(issues map[int][]*github.Issue, pulls map[int][]*github.PullRequest, open map[int][]*github.Issue) {
+    keys := []int{}
+    for k := range issues {
+        keys = append(keys, k)
+    }
+    for k := range pulls {
+        if _, ok := issues[k]; !ok {
+            keys = append(keys, k)
+        }
+    }
+
+    for _, key := range keys {
+        if _, ok := rs.Repos[key]; ok {
+            // NOTE: The hard coded first element will need to change once
+            // there are multiple models on the scene.
+            if _, ok := issues[key]; ok {
+                rs.Repos[key].Hive.Models[0].Conflator.SetIssueRequests(issues[key])
+            }
+            if _, ok := pulls[key]; ok {
+                rs.Repos[key].Hive.Models[0].Conflator.SetPullRequests(pulls[key])
+            }
+        }
+        rs.Repos[key].Hive.Models[0].Conflator.Conflate()
+    }
+}
+*/
