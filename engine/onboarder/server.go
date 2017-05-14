@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
-    "github.com/google/go-github/github"
 
 	"coralreefci/engine/onboarder/retriever"
 )
@@ -66,10 +65,16 @@ func (rs *RepoServer) Timer() {
 	go func() {
 		for range ticker.C {
 			// issues, pulls, open, err := rs.SQLDatabase.Read()
-            // if err != nil {
-            //     // DO SOMETHING HERE
-            // }
-            // rs.Conflate(issues, pulls, open)
+			// if err != nil {
+			//     // DO SOMETHING HERE
+			// }
+			// dispatcher := dispatcher.Dispatcher{
+			//     Repos: rs.Repos,
+			// }
+			// dispatcher.Start(10)
+			// Collector(issues)
+			// Collector(pulls)
+			// Collector(open)
 			// TODO: Implement the rest of the logic here.
 		}
 	}()

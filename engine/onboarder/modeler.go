@@ -73,6 +73,6 @@ func (rs *RepoServer) AddModel(repo *github.Repository, client *github.Client) e
 	//       hold the desired state of each model as a table.
 	model := models.Model{Algorithm: &bhattacharya.NBModel{}}
 	model.Algorithm.Learn(trainingSet)
-	rs.Repos[repoID].Hive.Models = append(rs.Repos[repoID].Hive.Models, &ArchModel{Model: &model})
+	rs.Repos[repoID].Hive.Blender.Models = append(rs.Repos[repoID].Hive.Blender.Models, &ArchModel{Model: &model})
 	return nil
 }

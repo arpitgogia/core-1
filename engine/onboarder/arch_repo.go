@@ -19,10 +19,13 @@ type ArchModel struct {
 	//                                       Conflation Scenarios, etc.)
 }
 
-type ArchHive struct {
+type Blender struct {
 	Models []*ArchModel
-	// PilotModels        []ArchModel
-	// ModelBlender       ModelBlender // TODO: Struct to build
+	// PilotModels []*ArchModel
+}
+
+type ArchHive struct {
+	Blender *Blender
 	// TossingGraph       TossingGraphAlgorithm // TODO: Struct to build
 	// StrategyParams     StrategyParams // TODO: Struct to build
 	// AggregateBenchmark Benchmark
