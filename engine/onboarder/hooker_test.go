@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/go-github/github"
 
-	"coralreefci/models"
+    "coralreefci/models"
 	"coralreefci/models/bhattacharya"
 )
 
@@ -25,15 +25,17 @@ func TestNewHook(t *testing.T) {
 	client.UploadURL = url
 
 	mods := make(map[int]*ArchRepo)
-	mods[0] = &ArchRepo{
-		Hive: &ArchHive{
-			Models: []*ArchModel{&ArchModel{
-				Model: &models.Model{
-					Algorithm: &bhattacharya.NBModel{},
-				}},
-			},
-		},
-	}
+    mods[0] = &ArchRepo{
+        Hive: &ArchHive{
+            Blender: &Blender{
+                Models: []*ArchModel{&ArchModel{
+    				Model: &models.Model{
+    					Algorithm: &bhattacharya.NBModel{},
+    				},
+                }},
+            },
+        },
+    }
 
 	testServer := RepoServer{Repos: mods}
 	mux.HandleFunc("/repos/nihilus/hunger/hooks", func(w http.ResponseWriter, r *http.Request) {
