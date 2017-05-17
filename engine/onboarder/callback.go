@@ -97,7 +97,7 @@ func (rs *RepoServer) githubCallbackHandler(w http.ResponseWriter, r *http.Reque
 				return
 			}
 			rs.NewArchRepo(repo, client)
-			if err := rs.AddModel(repo, client); err != nil {
+			if err := rs.AddModel(repo); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
