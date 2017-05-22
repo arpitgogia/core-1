@@ -24,8 +24,8 @@ func (d *Dispatcher) Start(count int) {
 		for {
 			work := <-Workload
 			go func() {
-				worker := <-Workers
-				worker <- work
+				workers := <-Workers
+				workers <- work
 			}()
 		}
 	}()

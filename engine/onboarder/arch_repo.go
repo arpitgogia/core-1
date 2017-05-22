@@ -1,13 +1,15 @@
 package onboarder
 
 import (
+	"coralreefci/engine/gateway/conflation"
 	"coralreefci/models"
 
 	"github.com/google/go-github/github"
 )
 
 type ArchModel struct {
-	Model *models.Model
+	Model     *models.Model
+	Conflator *conflation.Conflator
 	// Benchmark        Benchmark // TODO: Struct to build
 	// Scenarios        []conflation.Scenario
 	// PilotScenarios   []conflation.Scenario
@@ -17,10 +19,13 @@ type ArchModel struct {
 	//                                       Conflation Scenarios, etc.)
 }
 
-type ArchHive struct {
+type Blender struct {
 	Models []*ArchModel
-	// PilotModels        []ArchModel
-	// ModelBlender       ModelBlender // TODO: Struct to build
+	// PilotModels []*ArchModel
+}
+
+type ArchHive struct {
+	Blender *Blender
 	// TossingGraph       TossingGraphAlgorithm // TODO: Struct to build
 	// StrategyParams     StrategyParams // TODO: Struct to build
 	// AggregateBenchmark Benchmark
@@ -38,6 +43,8 @@ func (rs *RepoServer) NewArchRepo(repo *github.Repository, client *github.Client
 		Client: client,
 	}
 }
+
+// TODO: Instantiate the Conflator struct on the ArchRepo.
 
 // TODO:
 // Below are several potential helper methods for the ArchRepo:
