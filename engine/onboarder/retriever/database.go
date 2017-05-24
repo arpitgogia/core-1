@@ -6,18 +6,24 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-type Database struct {
-	db *sql.DB
+type DatabaseAccess interface {
+	Open()
+	Close()
+	Query(string, ...interface{}) (*sql.Rows, error)
 }
 
-func (d *Database) Open() {
+type MemSQL struct {
+	db *sql.DB // NOTE: Should this be a DatabaseAccess interface value instead?
+}
+
+func (m *MemSQL) Open() {
 	mysql, err := sql.Open("mysql", "root@/heupr?interpolateParams=true")
 	if err != nil {
 		panic(err.Error()) // Just for example purpose. You should use proper error handling instead of panic
 	}
-	d.db = mysql
+	m.db = mysql
 }
 
-func (d *Database) Close() {
-	d.db.Close()
+func (m *MemSQL) Close() {
+	m.db.Close()
 }
