@@ -30,6 +30,7 @@ func (w *Worker) Start() {
 			w.Queue <- w.Work
 			select {
 			case issuesEvent := <-w.Work:
+				issuesEvent.Issue.Repository = issuesEvent.Repo
 				w.Db.InsertIssue(*issuesEvent.Issue)
 			case <-w.Quit:
 				return

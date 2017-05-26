@@ -2,13 +2,13 @@ package replay
 
 import (
 	"bytes"
-	gzip "github.com/klauspost/pgzip"
 	"coralreefci/engine/ingestor"
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	gzip "github.com/klauspost/pgzip"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -25,8 +25,8 @@ import (
 )
 
 const (
-	secretKey = "chalmun"
-	localPath = "http://localhost:8080/"
+	secretKey = "test"
+	localPath = "http://localhost:8000/"
 )
 
 //var modelList = []*onboarder.ArchModel{}
@@ -42,7 +42,7 @@ type BacktestServer struct {
 	DB     *ingestor.Database
 	server http.Server
 	//onboarder.RepoServer
-	events []ingestor.Event
+	events        []ingestor.Event
 	WebhookEvents []ingestor.Event
 }
 
@@ -53,7 +53,7 @@ func (b *BacktestServer) routes() *mux.Router {
 }
 
 func (b *BacktestServer) Start() {
-	b.server = http.Server{Addr: "127.0.0.1:8080", Handler: b.routes()}
+	b.server = http.Server{Addr: "127.0.0.1:8000", Handler: b.routes()}
 	err := b.server.ListenAndServe()
 	if err != nil {
 		fmt.Println("BacktestServer", err)
@@ -176,7 +176,7 @@ func (b *BacktestServer) getIssues(w http.ResponseWriter, r *http.Request) {
 	repo := vars["repo"]
 	events, _ := b.DB.ReadBacktestEvents(org + "/" + repo)
 	issues := make([]*github.Issue, len(events))
-	if (webhooksplit == 1) {
+	if webhooksplit == 1 {
 		for i := 0; i < len(events); i++ {
 			issues[i] = events[i].Payload.Issue
 		}
@@ -184,7 +184,7 @@ func (b *BacktestServer) getIssues(w http.ResponseWriter, r *http.Request) {
 		for i := 0; i < int(float32(len(events))/webhooksplit); i++ {
 			issues[i] = events[i].Payload.Issue
 		}
-		for i := int(float32(len(events))/webhooksplit); i < len(events); i++ {
+		for i := int(float32(len(events)) / webhooksplit); i < len(events); i++ {
 			b.WebhookEvents = append(b.WebhookEvents, events[i])
 		}
 	}
@@ -193,7 +193,7 @@ func (b *BacktestServer) getIssues(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b *BacktestServer) HTTPPost(payload *bytes.Buffer) {
-	req, err := http.NewRequest("POST", "http://5b0f0030.ngrok.io/hook", payload)
+	req, err := http.NewRequest("POST", "http://localhost:8080/hook", payload)
 	if err != nil {
 		fmt.Println(err)
 	}

@@ -5,20 +5,22 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	"github.com/google/go-github/github"
+	"io"
 )
 
 type Event struct {
-	Type    string            `json:"type"`
-	Repo    github.Repository `json:"repo"`
-	Payload github.IssueEvent `json:"payload"`
+	Type    string             `json:"type"`
+	Repo    github.Repository  `json:"repo"`
+	Payload github.IssuesEvent `json:"payload"`
 }
 
 type Value interface{}
 
 type Database struct {
-	db *sql.DB
+	db         *sql.DB
+	BufferPool Pool
 }
 
 func (d *Database) Open() {
@@ -44,19 +46,7 @@ func (d *Database) EnableRepo(repoId int) {
 	fmt.Println(err)
 }
 
-func stripCtlAndExtFromBytes(str []byte) []byte {
-	b := make([]byte, len(str))
-	var bl int
-	for i := 0; i < len(str); i++ {
-		c := str[i]
-		if c >= 32 && c < 127 {
-			b[bl] = c
-			bl++
-		}
-	}
-	return b[:bl]
-}
-
+//TODO: Use LOAD DATA INFILE
 func (d *Database) BulkInsertBacktestEvents(events []Event) {
 	var buffer bytes.Buffer
 	eventsInsert := "INSERT INTO backtest_events(repo_id, repo_name, payload) VALUES"
@@ -109,49 +99,64 @@ func (d *Database) ReadBacktestEvents(repo string) ([]Event, error) {
 
 func (d *Database) InsertIssue(issue github.Issue) {
 	var buffer bytes.Buffer
-	eventsInsert := "INSERT INTO github_events(payload,is_pr,is_closed) VALUES"
-	eventsValuesFmt := "(?,0,?)"
-	numValues := 2
+	eventsInsert := "INSERT INTO github_events(repo_id,issues_id,number,payload,is_pr,is_closed) VALUES"
+	eventsValuesFmt := "(?,?,?,?,0,?)"
+	numValues := 5
 
 	buffer.WriteString(eventsInsert)
 	buffer.WriteString(eventsValuesFmt)
 	values := make([]interface{}, numValues)
+	values[0] = *issue.Repository.ID
+	values[1] = issue.ID
+	values[2] = issue.Number
 	payload, _ := json.Marshal(issue)
-	values[0] = stripCtlAndExtFromBytes(payload)
+	values[3] = stripCtlAndExtFromBytes(payload)
 	if issue.ClosedAt == nil {
-		values[1] = false
+		values[4] = false
 	} else {
-		values[1] = true
+		values[4] = true
 	}
 	_, err := d.db.Exec(buffer.String(), values...)
-	fmt.Println(err)
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func (d *Database) BulkInsertIssues(issues []*github.Issue) {
-	var buffer bytes.Buffer
-	eventsInsert := "INSERT INTO github_events(payload,is_pr,is_closed) VALUES"
-	eventsValuesFmt := "(?,0,?)"
-	numValues := 2
+	buffer := d.BufferPool.Get()
 
-	buffer.WriteString(eventsInsert)
-	delimeter := ""
-	values := make([]interface{}, len(issues)*numValues)
 	for i := 0; i < len(issues); i++ {
-		buffer.WriteString(delimeter)
-		buffer.WriteString(eventsValuesFmt)
-		offset := i * numValues
-
+		buffer.AppendInt(int64(*issues[i].Repository.ID))
+		buffer.AppendByte('~')
+		buffer.AppendInt(int64(*issues[i].ID))
+		buffer.AppendByte('~')
+		buffer.AppendInt(int64(*issues[i].Number))
+		buffer.AppendByte('~')
 		payload, _ := json.Marshal(*issues[i])
-		values[offset+0] = stripCtlAndExtFromBytes(payload)
+		_, _ = buffer.Write(escapeBytesBackslash(stripCtlAndExtFromBytes(payload)))
+		buffer.AppendByte('~')
+		buffer.AppendInt(0)
+		buffer.AppendByte('~')
 		if issues[i].ClosedAt == nil {
-			values[offset+1] = false
+			buffer.AppendInt(1)
 		} else {
-			values[offset+1] = true
+			buffer.AppendInt(0)
 		}
-		delimeter = ","
+		buffer.AppendByte('\n')
 	}
-	_, err := d.db.Exec(buffer.String(), values...)
-	fmt.Println(err)
+
+	issues = nil //PERF: Mark for garbage collection
+	sqlBuffer := bytes.NewBuffer(buffer.Bytes())
+	buffer.Reset()
+	buffer.Free()
+	mysql.RegisterReaderHandler("data", func() io.Reader {
+		return sqlBuffer
+	})
+	defer mysql.DeregisterReaderHandler("data")
+	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE github_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,issues_id,number,payload,is_pr,is_closed)")
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func (d *Database) InsertPullRequest(pull github.PullRequest) {
@@ -175,29 +180,133 @@ func (d *Database) InsertPullRequest(pull github.PullRequest) {
 }
 
 func (d *Database) BulkInsertPullRequests(pulls []*github.PullRequest) {
-	var buffer bytes.Buffer
-	eventsInsert := "INSERT INTO github_events(payload,is_pr,is_closed) VALUES"
-	eventsValuesFmt := "(?,1,?)"
-	numValues := 2
+	buffer := d.BufferPool.Get()
 
-	buffer.WriteString(eventsInsert)
-	delimeter := ""
-	values := make([]interface{}, len(pulls)*numValues)
 	for i := 0; i < len(pulls); i++ {
-		buffer.WriteString(delimeter)
-		buffer.WriteString(eventsValuesFmt)
-		offset := i * numValues
-
+		buffer.AppendInt(int64(*pulls[i].Base.Repo.ID))
+		buffer.AppendByte('~')
+		buffer.AppendInt(int64(*pulls[i].ID))
+		buffer.AppendByte('~')
+		buffer.AppendInt(int64(*pulls[i].Number))
+		buffer.AppendByte('~')
 		payload, _ := json.Marshal(*pulls[i])
-		values[offset+0] = stripCtlAndExtFromBytes(payload)
+		_, _ = buffer.Write(escapeBytesBackslash(stripCtlAndExtFromBytes(payload)))
+		buffer.AppendByte('~')
+		buffer.AppendInt(1)
+		buffer.AppendByte('~')
 		if pulls[i].ClosedAt == nil {
-			values[offset+1] = false
+			buffer.AppendInt(1)
 		} else {
-			values[offset+1] = true
+			buffer.AppendInt(0)
 		}
-
-		delimeter = ","
+		buffer.AppendByte('\n')
 	}
-	_, err := d.db.Exec(buffer.String(), values...)
-	fmt.Println(err)
+
+	pulls = nil //PERF: Mark for garbage collection
+	sqlBuffer := bytes.NewBuffer(buffer.Bytes())
+	buffer.Reset()
+	buffer.Free()
+	mysql.RegisterReaderHandler("data", func() io.Reader {
+		return sqlBuffer
+	})
+	defer mysql.DeregisterReaderHandler("data")
+	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE github_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,issues_id,number,payload,is_pr,is_closed)")
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func stripCtlAndExtFromBytes(str []byte) []byte {
+	b := make([]byte, len(str))
+	var bl int
+	for i := 0; i < len(str); i++ {
+		c := str[i]
+		if c >= 32 && c < 127 {
+			b[bl] = c
+			bl++
+		}
+	}
+	return b[:bl]
+}
+
+func escapeString(sql string) string {
+	dest := make([]byte, 0, 2*len(sql))
+	var escape byte
+	for i := 0; i < len(sql); i++ {
+		c := sql[i]
+		escape = 0
+		switch c {
+		case '\\':
+			escape = '\\'
+			break
+		case '\'':
+			escape = '\''
+			break
+		}
+		if escape != 0 {
+			dest = append(dest, '\\', escape)
+		} else {
+			dest = append(dest, c)
+		}
+	}
+	return string(dest)
+}
+
+func escapeBytesQuotes(v []byte) []byte {
+	buf := make([]byte, 2*len(v))
+	pos := 0
+	for _, c := range v {
+		if c == '\'' {
+			buf[pos] = '\''
+			buf[pos+1] = '\''
+			pos += 2
+		} else {
+			buf[pos] = c
+			pos++
+		}
+	}
+	return buf[:pos]
+}
+
+func escapeBytesBackslash(v []byte) []byte {
+	buf := make([]byte, 2*len(v))
+	pos := 0
+	for i := 0; i < len(v); i++ {
+		switch v[i] {
+		case '\x00':
+			buf[pos] = '\\'
+			buf[pos+1] = '0'
+			pos += 2
+		case '\n':
+			buf[pos] = '\\'
+			buf[pos+1] = 'n'
+			pos += 2
+		case '\r':
+			buf[pos] = '\\'
+			buf[pos+1] = 'r'
+			pos += 2
+		case '\x1a':
+			buf[pos] = '\\'
+			buf[pos+1] = 'Z'
+			pos += 2
+		case '\'':
+			buf[pos] = '\\'
+			buf[pos+1] = '\''
+			pos += 2
+		case '"':
+			buf[pos] = '\\'
+			buf[pos+1] = '"'
+			pos += 2
+		case '\\':
+			buf[pos] = '\\'
+			buf[pos+1] = '\\'
+			pos += 2
+		case '~': //sql delimeter
+			continue
+		default:
+			buf[pos] = v[i]
+			pos++
+		}
+	}
+	return buf[:pos]
 }
