@@ -1,29 +1,28 @@
-package retriever
+package dispatcher
 
 import (
-	"fmt"
-
-	"github.com/google/go-github/github"
-
-	"coralreefci/engine/gateway/conflation"
-	"coralreefci/models"
+	// "coralreefci/engine/gateway/conflation"
+	"coralreefci/engine/onboarder"
+	"coralreefci/engine/onboarder/retriever"
+	// "coralreefci/models"
+	// "coralreefci/models/bhattacharya"
 )
 
 type Worker struct {
-	ID     int
-	Work   chan interface{}
-	Queue  chan chan interface{}
-	Models map[int]models.Model
-	Quit   chan bool
+	ID    int
+	Work  chan *retriever.RepoData
+	Queue chan chan *retriever.RepoData
+	Repos map[int]*onboarder.ArchRepo
+	Quit  chan bool
 }
 
-func NewWorker(id int, queue chan chan interface{}) Worker {
+func NewWorker(id int, queue chan chan *retriever.RepoData) Worker {
 	return Worker{
-		ID:     id,
-		Work:   make(chan interface{}),
-		Queue:  queue,
-		Models: make(map[int]models.Model),
-		Quit:   make(chan bool),
+		ID:    id,
+		Work:  make(chan *retriever.RepoData),
+		Queue: queue,
+		Repos: make(map[int]*onboarder.ArchRepo),
+		Quit:  make(chan bool),
 	}
 }
 
@@ -31,25 +30,19 @@ func (w *Worker) Start() {
 	go func() {
 		for {
 			w.Queue <- w.Work
-            object := <-w.Work
-            if _, ok := object.(github.Issue); ok {
-                issue := object.(github.Issue)
-            } else {
-                pull := object.(github.PullRequest)
-            }
 			select {
-			case issue:
-				if object.ClosedAt != nil {
-                    // TODO: CONFLATE + LEARN
-				} else {
-					// TODO: Call Predict Method
-					// assignees := w.Models[*issuesEvent.Repo.ID].Algorithm.Predict(expandedIssue)
-					// NOTE: This is likely where the assignment function will be called.
-					// assignment.AssignContributor(assignees[0], issuesEvent, testClient())
-					// HACK: using test client
+			case repodata := <-w.Work:
+				if len(repodata.Open) != 0 {
+					w.Repos[repodata.RepoID].Hive.Blender.Models[0].Conflator.SetIssueRequests(repodata.Open)
 				}
-            case pull:
-                // STUFF GOES HERE
+				if len(repodata.Closed) != 0 {
+					w.Repos[repodata.RepoID].Hive.Blender.Models[0].Conflator.SetIssueRequests(repodata.Closed)
+				}
+				if len(repodata.Pulls) != 0 {
+					w.Repos[repodata.RepoID].Hive.Blender.Models[0].Conflator.SetPullRequests(repodata.Pulls)
+				}
+				w.Repos[repodata.RepoID].Hive.Blender.Models[0].Conflator.Conflate()
+				// TODO: Implement learn method calls.
 			case <-w.Quit:
 				return
 			}

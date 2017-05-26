@@ -1,15 +1,13 @@
-package retriever
+package dispatcher
 
-import "github.com/google/go-github/github"
+import "coralreefci/engine/onboarder/retriever"
 
-var Workload = make(chan github.Issue, 100)
+var Workload = make(chan *retriever.RepoData, 100)
 
-func Collector(issues []github.Issue) {
-	for _, i := range issues {
-		Workload <- i
+func Collector(repodata map[int]*retriever.RepoData) {
+	if len(repodata) != 0 {
+		for _, rd := range repodata {
+			Workload <- rd
+		}
 	}
 }
-
-// NOTE: This particular function will likely need some logic regarding what
-// is passed into it - this will then determine which particular channel the
-// objects are then passed into.

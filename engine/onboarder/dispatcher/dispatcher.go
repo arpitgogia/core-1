@@ -1,22 +1,21 @@
-package retriever
+package dispatcher
 
 import (
-	"github.com/google/go-github/github"
-
-	"coralreefci/models"
+	"coralreefci/engine/onboarder"
+	"coralreefci/engine/onboarder/retriever"
 )
 
-var Workers chan chan github.Issue
+var Workers chan chan *retriever.RepoData
 
 type Dispatcher struct {
-	Models map[int]models.Model
+	Repos map[int]*onboarder.ArchRepo
 }
 
 func (d *Dispatcher) Start(count int) {
-	Workers = make(chan chan github.Issue, count)
+	Workers = make(chan chan *retriever.RepoData, count)
 	for i := 0; i < count; i++ {
 		worker := NewWorker(i+1, Workers)
-		worker.Models = d.Models
+		worker.Repos = d.Repos // TODO: Move into NewWorker function as argument.
 		worker.Start()
 	}
 

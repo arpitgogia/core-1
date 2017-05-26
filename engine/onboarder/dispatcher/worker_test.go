@@ -1,14 +1,14 @@
-package retriever
+package dispatcher
 
 import (
 	"testing"
 
-	"github.com/google/go-github/github"
+	"coralreefci/engine/onboarder/retriever"
 )
 
 func TestNewWorker(t *testing.T) {
 	testID := 1
-	channel := make(chan chan github.Issue)
+	channel := make(chan chan *retriever.RepoData)
 	testWorker := NewWorker(testID, channel)
 	if testWorker.ID != testID {
 		t.Error("Failure creating new worker object")
