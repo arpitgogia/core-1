@@ -13,7 +13,7 @@ import (
 type RepoServer struct {
 	Server       http.Server
 	Repos        map[int]*ArchRepo
-	SQLDatabase  *retriever.Database
+	SQLDatabase  *retriever.MemSQL
 	BoltDatabase BoltDB
 }
 
@@ -64,17 +64,15 @@ func (rs *RepoServer) Timer() {
 	ticker := time.NewTicker(time.Millisecond * 500)
 	go func() {
 		for range ticker.C {
-			// issues, pulls, open, err := rs.SQLDatabase.Read()
+			// data, err := rs.SQLDatabase.Read()
 			// if err != nil {
 			//     // DO SOMETHING HERE
 			// }
 			// dispatcher := dispatcher.Dispatcher{
 			//     Repos: rs.Repos,
 			// }
-			// dispatcher.Start(10)
-			// Collector(issues)
-			// Collector(pulls)
-			// Collector(open)
+            // dispatcher.Start(10)
+			// Collector(data)
 			// TODO: Implement the rest of the logic here.
 		}
 	}()
