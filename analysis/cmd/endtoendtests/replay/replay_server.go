@@ -42,7 +42,7 @@ type BacktestServer struct {
 	DB     *ingestor.Database
 	server http.Server
 	//onboarder.RepoServer
-	events        []ingestor.Event
+	events        []*ingestor.Event
 	WebhookEvents []ingestor.Event
 }
 
@@ -82,9 +82,12 @@ func (b *BacktestServer) LoadArchive(path string) {
 			} else {
 				fmt.Println(parseErr)
 			}
-			if loadedFiles > 0 && loadedFiles%15 == 0 {
+			if loadedFiles > 0 && loadedFiles%50 == 0 {
 				b.DB.BulkInsertBacktestEvents(b.events)
-				b.events = []ingestor.Event{}
+				for i := 0; i < len(b.events); i++ {
+					RecycleEvent(b.events[i])
+				}
+				b.events = []*ingestor.Event{}
 				fmt.Printf("Inserted %d out of %d files\n", loadedFiles, totalFiles)
 			}
 			return nil
@@ -98,9 +101,12 @@ func (b *BacktestServer) LoadArchive(path string) {
 		fmt.Println("Unrecognized argument; provide a file or directory")
 	}
 	if len(b.events) > 0 {
-		b.DB.BulkInsertBacktestEvents(b.events)
 		fmt.Printf("Inserted remaining records", len(b.events))
-		b.events = []ingestor.Event{}
+		b.DB.BulkInsertBacktestEvents(b.events)
+		for i := 0; i < len(b.events); i++ {
+			RecycleEvent(b.events[i])
+		}
+		b.events = []*ingestor.Event{}
 	}
 }
 
@@ -117,7 +123,7 @@ func (b *BacktestServer) parseFile(filename string) error {
 	defer gr.Close()
 	jd := json.NewDecoder(gr)
 	for {
-		e := ingestor.Event{}
+		e := GetEvent()
 		if err := jd.Decode(&e); err == io.EOF {
 			break
 		} else if err != nil {

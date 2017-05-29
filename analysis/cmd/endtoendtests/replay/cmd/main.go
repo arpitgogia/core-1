@@ -12,7 +12,8 @@ func main() {
 	archivePathFlag := flag.String("archivepath", "", "location of github archive")
 	flag.Parse()
 
-	db := ingestor.Database{}
+	bufferPool := ingestor.NewPool()
+	db := ingestor.Database{BufferPool: bufferPool}
 	db.Open()
 	bs := replay.BacktestServer{DB: &db}
 	go bs.Start()

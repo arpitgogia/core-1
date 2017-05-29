@@ -46,31 +46,32 @@ func (d *Database) EnableRepo(repoId int) {
 	fmt.Println(err)
 }
 
-//TODO: Use LOAD DATA INFILE
-func (d *Database) BulkInsertBacktestEvents(events []Event) {
-	var buffer bytes.Buffer
-	eventsInsert := "INSERT INTO backtest_events(repo_id, repo_name, payload) VALUES"
-	eventsValuesFmt := "(?,?,?)"
-	numValues := 3
+func (d *Database) BulkInsertBacktestEvents(events []*Event) {
+	buffer := d.BufferPool.Get()
 
-	buffer.WriteString(eventsInsert)
-	delimeter := ""
-	values := make([]interface{}, len(events)*numValues)
 	for i := 0; i < len(events); i++ {
-		buffer.WriteString(delimeter)
-		buffer.WriteString(eventsValuesFmt)
-		offset := i * numValues
-
-		values[offset+0] = events[i].Repo.ID
-		values[offset+1] = events[i].Repo.Name
-		payload, _ := json.Marshal(events[i])
-		values[offset+2] = stripCtlAndExtFromBytes(payload)
-		delimeter = ","
+		buffer.AppendInt(int64(*events[i].Repo.ID))
+		buffer.AppendByte('~')
+		buffer.AppendString(*events[i].Repo.Name)
+		buffer.AppendByte('~')
+		payload, _ := json.Marshal(*events[i])
+		_, _ = buffer.Write(escapeBytesBackslash(stripCtlAndExtFromBytes(payload)))
+		buffer.AppendByte('\n')
 	}
-	_, err := d.db.Exec(buffer.String(), values...)
+
+	sqlBuffer := bytes.NewBuffer(buffer.Bytes())
+	buffer.Reset()
+	buffer.Free()
+
+	mysql.RegisterReaderHandler("data", func() io.Reader {
+		return sqlBuffer
+	})
+	defer mysql.DeregisterReaderHandler("data")
+	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE backtest_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,repo_name,payload)")
 	if err != nil {
 		fmt.Println(err)
 	}
+	sqlBuffer.Reset()
 }
 
 func (d *Database) ReadBacktestEvents(repo string) ([]Event, error) {
@@ -226,7 +227,9 @@ func stripCtlAndExtFromBytes(str []byte) []byte {
 			bl++
 		}
 	}
-	return b[:bl]
+	//return b[:bl]
+	str = b[:bl] //PERF
+	return str
 }
 
 func escapeString(sql string) string {
@@ -308,5 +311,7 @@ func escapeBytesBackslash(v []byte) []byte {
 			pos++
 		}
 	}
-	return buf[:pos]
+	//return buf[:pos]
+	v = buf[:pos] //PERF
+	return v
 }
