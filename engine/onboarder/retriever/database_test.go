@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+    "reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -114,11 +115,6 @@ var (
 	sourceName               = "jocasta"
 )
 
-// TODO: Move into specific new test database function.
-// func init() {
-// 	sql.Register(driverName, fdriver)
-// }
-
 func contains(list []string, y string) bool {
 	for _, x := range list {
 		if x == y {
@@ -126,10 +122,6 @@ func contains(list []string, y string) bool {
 		}
 	}
 	return false
-}
-
-type Dummy struct {
-	driver.Driver
 }
 
 var hookOpenErr struct {
@@ -855,9 +847,9 @@ func (rc *rowsCursor) Columns() []string {
 	return rc.cols[rc.posSet]
 }
 
-// func (rc *rowsCursor) ColumnTypeScanType(index int) reflect.Type {
-// 	return colTypeToReflectType(rc.colType[rc.posSet][index])
-// }
+func (rc *rowsCursor) ColumnTypeScanType(index int) reflect.Type {
+	return colTypeToReflectType(rc.colType[rc.posSet][index])
+}
 
 var rowsCursorNextHook func(dest []driver.Value) error
 
@@ -961,33 +953,33 @@ func converterForType(typ string) driver.ValueConverter {
 	panic("invalid fakedb column type of " + typ)
 }
 
-// func colTypeToReflectType(typ string) reflect.Type {
-// 	switch typ {
-// 	case "bool":
-// 		return reflect.TypeOf(false)
-// 	case "nullbool":
-// 		return reflect.TypeOf(sql.NullBool{})
-// 	case "int32":
-// 		return reflect.TypeOf(int32(0))
-// 	case "string":
-// 		return reflect.TypeOf("")
-// 	case "nullstring":
-// 		return reflect.TypeOf(sql.NullString{})
-// 	case "int64":
-// 		return reflect.TypeOf(int64(0))
-// 	case "nullint64":
-// 		return reflect.TypeOf(sql.NullInt64{})
-// 	case "float64":
-// 		return reflect.TypeOf(float64(0))
-// 	case "nullfloat64":
-// 		return reflect.TypeOf(sql.NullFloat64{})
-// 	case "datetime":
-// 		return reflect.TypeOf(time.Time{})
-// 	case "any":
-// 		return reflect.TypeOf(new(interface{})).Elem()
-// 	}
-// 	panic("invalid fakedb column type of " + typ)
-// }
+func colTypeToReflectType(typ string) reflect.Type {
+	switch typ {
+	case "bool":
+		return reflect.TypeOf(false)
+	case "nullbool":
+		return reflect.TypeOf(sql.NullBool{})
+	case "int32":
+		return reflect.TypeOf(int32(0))
+	case "string":
+		return reflect.TypeOf("")
+	case "nullstring":
+		return reflect.TypeOf(sql.NullString{})
+	case "int64":
+		return reflect.TypeOf(int64(0))
+	case "nullint64":
+		return reflect.TypeOf(sql.NullInt64{})
+	case "float64":
+		return reflect.TypeOf(float64(0))
+	case "nullfloat64":
+		return reflect.TypeOf(sql.NullFloat64{})
+	case "datetime":
+		return reflect.TypeOf(time.Time{})
+	case "any":
+		return reflect.TypeOf(new(interface{})).Elem()
+	}
+	panic("invalid fakedb column type of " + typ)
+}
 
 func newTestDB(t testing.TB, query string, args ...interface{}) *sql.DB {
     sql.Register(driverName, fdriver)
