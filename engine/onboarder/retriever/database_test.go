@@ -1,1000 +1,159 @@
 package retriever
 
 import (
-	"context"
-	"database/sql"
 	"database/sql/driver"
-	"errors"
-	"fmt"
-	"io"
-	"log"
-    "reflect"
-	"strconv"
-	"strings"
-	"sync"
-	"testing"
-	"time"
+	// "fmt" // TEMPORARY
 )
 
-var _ = log.Printf
-
-// NOTE: This is a workaround - this file was written using the 1.7.3 version
-// of Go and the NamedValue struct was not available at that time.
-type NamedValue struct {
-	Name    string
-	Ordinal int
-	Value   driver.Value
+type testDB struct {
+	name string
 }
 
-type fakeDriver struct {
-	mu         sync.Mutex
-	openCount  int
-	closeCount int
-	waitCh     chan struct{}
-	waitingCh  chan struct{}
-	dbs        map[string]*fakeDB
-}
+type testDriver struct{}
 
-type fakeDB struct {
-	name     string
-	mu       sync.Mutex
-	tables   map[string]*table
-	badConn  bool
-	allowAny bool
-}
-
-type table struct {
-	mu      sync.Mutex
-	colname []string
-	coltype []string
-	rows    []*row
-}
-
-func (t *table) columnIndex(name string) int {
-	for n, nname := range t.colname {
-		if name == nname {
-			return n
-		}
-	}
-	return -1
-}
-
-type row struct {
-	cols []interface{} // must be same size as its table colname + coltype
-}
-
-type fakeConn struct {
-	db     *fakeDB
-	currTx *fakeTx
-	// Stats for tests:
-	mu          sync.Mutex
-	stmtsMade   int
-	stmtsClosed int
-	numPrepare  int
-	// Bad connection tests; see isBad()
-	bad       bool
-	stickyBad bool
-}
-
-func (c *fakeConn) incrStat(v *int) {
-	c.mu.Lock()
-	*v++
-	c.mu.Unlock()
-}
-
-type fakeTx struct {
-	c *fakeConn
-}
-
-type boundCol struct {
-	Column      string
-	Placeholder string
-	Ordinal     int
-}
-
-type fakeStmt struct {
-	c                    *fakeConn
-	q                    string // just for debugging
-	cmd                  string
-	table                string
-	panic                string
-	wait                 time.Duration
-	next                 *fakeStmt // used for returning multiple results.
-	closed               bool
-	colName              []string                // used by CREATE, INSERT, SELECT (selected columns)
-	colType              []string                // used by CREATE
-	colValue             []interface{}           // used by INSERT (mix of strings and "?" for bound params)
-	placeholders         int                     // used by INSERT/SELECT: number of ? params
-	whereCol             []boundCol              // used by SELECT (all placeholders)
-	placeholderConverter []driver.ValueConverter // used by INSERT
-}
-
-var (
-	fdriver    driver.Driver = &fakeDriver{}
-	driverName               = "library"
-	sourceName               = "jocasta"
-)
-
-func contains(list []string, y string) bool {
-	for _, x := range list {
-		if x == y {
-			return true
-		}
-	}
-	return false
-}
-
-var hookOpenErr struct {
-	sync.Mutex
-	fn func() error
-}
-
-func setHookOpenErr(fn func() error) {
-	hookOpenErr.Lock()
-	defer hookOpenErr.Unlock()
-	hookOpenErr.fn = fn
-}
-
-func (d *fakeDriver) Open(dsn string) (driver.Conn, error) {
-	hookOpenErr.Lock()
-	fn := hookOpenErr.fn
-	hookOpenErr.Unlock()
-	if fn != nil {
-		if err := fn(); err != nil {
-			return nil, err
-		}
-	}
-	parts := strings.Split(dsn, ";")
-	if len(parts) < 1 {
-		return nil, errors.New("fakedb: no database name")
-	}
-	name := parts[0]
-
-	db := d.getDB(name)
-
-	d.mu.Lock()
-	d.openCount++
-	d.mu.Unlock()
-	conn := &fakeConn{db: db}
-
-	if len(parts) >= 2 && parts[1] == "badConn" {
-		conn.bad = true
-	}
-	if d.waitCh != nil {
-		d.waitingCh <- struct{}{}
-		<-d.waitCh
-		d.waitCh = nil
-		d.waitingCh = nil
-	}
+func (td testDriver) Open(name string) (driver.Conn, error) {
+	db := &testDB{name: name}
+	conn := &testConn{db: db}
 	return conn, nil
 }
 
-func (d *fakeDriver) getDB(name string) *fakeDB {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.dbs == nil {
-		d.dbs = make(map[string]*fakeDB)
-	}
-	db, ok := d.dbs[name]
-	if !ok {
-		db = &fakeDB{name: name}
-		d.dbs[name] = db
-	}
-	return db
+type testConn struct {
+	db *testDB
 }
 
-func (db *fakeDB) wipe() {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	db.tables = nil
+func (tc testConn) Prepare(query string) (driver.Stmt, error) {
+	return nil, nil
 }
 
-func (db *fakeDB) createTable(name string, columnNames, columnTypes []string) error {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	if db.tables == nil {
-		db.tables = make(map[string]*table)
-	}
-	if _, exist := db.tables[name]; exist {
-		return fmt.Errorf("table %q already exists", name)
-	}
-	if len(columnNames) != len(columnTypes) {
-		return fmt.Errorf("create table of %q len(names) != len(types): %d vs %d",
-			name, len(columnNames), len(columnTypes))
-	}
-	db.tables[name] = &table{colname: columnNames, coltype: columnTypes}
+func (tc testConn) Close() error {
 	return nil
 }
 
-// must be called with db.mu lock held
-func (db *fakeDB) table(table string) (*table, bool) {
-	if db.tables == nil {
-		return nil, false
-	}
-	t, ok := db.tables[table]
-	return t, ok
+func (tc testConn) Begin() (driver.Tx, error) {
+	return nil, nil
 }
 
-func (db *fakeDB) columnType(table, column string) (typ string, ok bool) {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	t, ok := db.table(table)
-	if !ok {
-		return
-	}
-	for n, cname := range t.colname {
-		if cname == column {
-			return t.coltype[n], true
-		}
-	}
-	return "", false
+func (c *testConn) Query(query string, args []driver.Value) (driver.Rows, error) {
+	// fmt.Println("SOMETHING WICKED THIS WAY COMES") // TEMPORARY
+	tr := testRows{}
+	return tr, nil
 }
 
-func (c *fakeConn) isBad() bool {
-	if c.stickyBad {
-		return true
-	} else if c.bad {
-		// alternate between bad conn and not bad conn
-		c.db.badConn = !c.db.badConn
-		return c.db.badConn
-	} else {
-		return false
-	}
-}
+type testStmt struct{}
 
-func (c *fakeConn) Begin() (driver.Tx, error) {
-	if c.isBad() {
-		return nil, driver.ErrBadConn
-	}
-	if c.currTx != nil {
-		return nil, errors.New("already in a transaction")
-	}
-	c.currTx = &fakeTx{c: c}
-	return c.currTx, nil
-}
-
-var hookPostCloseConn struct {
-	sync.Mutex
-	fn func(*fakeConn, error)
-}
-
-func setHookpostCloseConn(fn func(*fakeConn, error)) {
-	hookPostCloseConn.Lock()
-	defer hookPostCloseConn.Unlock()
-	hookPostCloseConn.fn = fn
-}
-
-var testStrictClose *testing.T
-
-// setStrictFakeConnClose sets the t to Errorf on when fakeConn.Close
-// fails to close. If nil, the check is disabled.
-func setStrictFakeConnClose(t *testing.T) {
-	testStrictClose = t
-}
-
-func (c *fakeConn) Close() (err error) {
-	drv := fdriver.(*fakeDriver)
-	defer func() {
-		if err != nil && testStrictClose != nil {
-			testStrictClose.Errorf("failed to close a test fakeConn: %v", err)
-		}
-		hookPostCloseConn.Lock()
-		fn := hookPostCloseConn.fn
-		hookPostCloseConn.Unlock()
-		if fn != nil {
-			fn(c, err)
-		}
-		if err == nil {
-			drv.mu.Lock()
-			drv.closeCount++
-			drv.mu.Unlock()
-		}
-	}()
-	if c.currTx != nil {
-		return errors.New("can't close fakeConn; in a Transaction")
-	}
-	if c.db == nil {
-		return errors.New("can't close fakeConn; already closed")
-	}
-	if c.stmtsMade > c.stmtsClosed {
-		return errors.New("can't close; dangling statement(s)")
-	}
-	c.db = nil
+func (ts testStmt) Close() error {
 	return nil
 }
 
-func checkSubsetTypes(allowAny bool, args []NamedValue) error {
-	for _, arg := range args {
-		switch arg.Value.(type) {
-		case int64, float64, bool, nil, []byte, string, time.Time:
-		default:
-			if !allowAny {
-				return fmt.Errorf("fakedb_test: invalid argument ordinal %[1]d: %[2]v, type %[2]T", arg.Ordinal, arg.Value)
-			}
-		}
-	}
+func (ts testStmt) NumInput() int {
+	return 0
+}
+
+func (ts testStmt) Exec(args []driver.Value) (driver.Result, error) {
+	return nil, nil
+}
+
+func (ts testStmt) Query(args []driver.Value) (driver.Rows, error) {
+	return nil, nil
+}
+
+type testRows struct {
+	rowsi    driver.Rows
+	cancel   func() // called when Rows is closed, may be nil.
+	closed   bool
+	lasterr  error
+	lastcols []driver.Value
+	// Stuff goes here; see https://github.com/golang/go/blob/master/src/database/sql/fakedb_test.go#L858
+}
+
+func (tr testRows) Columns() []string {
+	out := make([]string, 3)
+	return out
+}
+
+func (tr testRows) Close() error {
 	return nil
 }
 
-func (c *fakeConn) Exec(query string, args []driver.Value) (driver.Result, error) {
-	panic("ExecContext was not called.")
+func (tr testRows) Next(dest []driver.Value) error {
+	dest[0] = 1 // id
+	// dest[1] = 1 // repo_id
+	// dest[2] = 1 // issues_id
+	// dest[3] = 1 // number
+	// dest[4] = true  // is_closed
+	dest[1] = false // is_pull
+	// dest[2] = backslashes(ctrlExt(testPayload))
+    dest[2] = testPayload
+	return nil
 }
 
-func (c *fakeConn) ExecContext(ctx context.Context, query string, args []NamedValue) (driver.Result, error) {
-	err := checkSubsetTypes(c.db.allowAny, args)
-	if err != nil {
-		return nil, err
-	}
-	return nil, driver.ErrSkip
-}
+// var testPayload = []byte(`{"url":"https://api.github.com/repos/heupr/test/issues/62","repository_url":"https://api.github.com/repos/heupr/test","labels_url":"https://api.github.com/repos/heupr/test/issues/62/labels{/name}","comments_url":"https://api.github.com/repos/heupr/test/issues/62/comments","events_url":"https://api.github.com/repos/heupr/test/issues/62/events","html_url":"https://github.com/heupr/test/issues/62","id":211988771,"number":62,"title":"Darth Test","user":{"login":"taylormike","id":15882362,"avatar_url":"https://avatars3.githubusercontent.com/u/15882362?v=3","gravatar_id":"","url":"https://api.github.com/users/taylormike","html_url":"https://github.com/taylormike","followers_url":"https://api.github.com/users/taylormike/followers","following_url":"https://api.github.com/users/taylormike/following{/other_user}","gists_url":"https://api.github.com/users/taylormike/gists{/gist_id}","starred_url":"https://api.github.com/users/taylormike/starred{/owner}{/repo}","subscriptions_url":"https://api.github.com/users/taylormike/subscriptions","organizations_url":"https://api.github.com/users/taylormike/orgs","repos_url":"https://api.github.com/users/taylormike/repos","events_url":"https://api.github.com/users/taylormike/events{/privacy}","received_events_url":"https://api.github.com/users/taylormike/received_events","type":"User","site_admin":false},"labels":[],"state":"open","locked":false,"assignee":null,"assignees":[],"milestone":null,"comments":0,"created_at":"2017-03-05T22:09:20Z","updated_at":"2017-03-05T22:09:20Z","closed_at":null,"body":"Darth "},"repository":{"id":81689981,"name":"test","full_name":"heupr/test","owner":{"login":"heupr","id":20547820,"avatar_url":"https://avatars1.githubusercontent.com/u/20547820?v=3","gravatar_id":"","url":"https://api.github.com/users/heupr","html_url":"https://github.com/heupr","followers_url":"https://api.github.com/users/heupr/followers","following_url":"https://api.github.com/users/heupr/following{/other_user}","gists_url":"https://api.github.com/users/heupr/gists{/gist_id}","starred_url":"https://api.github.com/users/heupr/starred{/owner}{/repo}","subscriptions_url":"https://api.github.com/users/heupr/subscriptions","organizations_url":"https://api.github.com/users/heupr/orgs","repos_url":"https://api.github.com/users/heupr/repos","events_url":"https://api.github.com/users/heupr/events{/privacy}","received_events_url":"https://api.github.com/users/heupr/received_events","type":"Organization","site_admin":false},"private":true,"html_url":"https://github.com/heupr/test","description":null,"fork":false,"url":"https://api.github.com/repos/heupr/test","forks_url":"https://api.github.com/repos/heupr/test/forks","keys_url":"https://api.github.com/repos/heupr/test/keys{/key_id}","collaborators_url":"https://api.github.com/repos/heupr/test/collaborators{/collaborator}","teams_url":"https://api.github.com/repos/heupr/test/teams","hooks_url":"https://api.github.com/repos/heupr/test/hooks","issue_events_url":"https://api.github.com/repos/heupr/test/issues/events{/number}","events_url":"https://api.github.com/repos/heupr/test/events","assignees_url":"https://api.github.com/repos/heupr/test/assignees{/user}","branches_url":"https://api.github.com/repos/heupr/test/branches{/branch}","tags_url":"https://api.github.com/repos/heupr/test/tags","blobs_url":"https://api.github.com/repos/heupr/test/git/blobs{/sha}","git_tags_url":"https://api.github.com/repos/heupr/test/git/tags{/sha}","git_refs_url":"https://api.github.com/repos/heupr/test/git/refs{/sha}","trees_url":"https://api.github.com/repos/heupr/test/git/trees{/sha}","statuses_url":"https://api.github.com/repos/heupr/test/statuses/{sha}","languages_url":"https://api.github.com/repos/heupr/test/languages","stargazers_url":"https://api.github.com/repos/heupr/test/stargazers","contributors_url":"https://api.github.com/repos/heupr/test/contributors","subscribers_url":"https://api.github.com/repos/heupr/test/subscribers","subscription_url":"https://api.github.com/repos/heupr/test/subscription","commits_url":"https://api.github.com/repos/heupr/test/commits{/sha}","git_commits_url":"https://api.github.com/repos/heupr/test/git/commits{/sha}","comments_url":"https://api.github.com/repos/heupr/test/comments{/number}","issue_comment_url":"https://api.github.com/repos/heupr/test/issues/comments{/number}","contents_url":"https://api.github.com/repos/heupr/test/contents/{+path}","compare_url":"https://api.github.com/repos/heupr/test/compare/{base}...{head}","merges_url":"https://api.github.com/repos/heupr/test/merges","archive_url":"https://api.github.com/repos/heupr/test/{archive_format}{/ref}","downloads_url":"https://api.github.com/repos/heupr/test/downloads","issues_url":"https://api.github.com/repos/heupr/test/issues{/number}","pulls_url":"https://api.github.com/repos/heupr/test/pulls{/number}","milestones_url":"https://api.github.com/repos/heupr/test/milestones{/number}","notifications_url":"https://api.github.com/repos/heupr/test/notifications{?since,all,participating}","labels_url":"https://api.github.com/repos/heupr/test/labels{/name}","releases_url":"https://api.github.com/repos/heupr/test/releases{/id}","deployments_url":"https://api.github.com/repos/heupr/test/deployments","created_at":"2017-02-11T23:31:50Z","updated_at":"2017-02-12T16:42:55Z","pushed_at":"2017-02-11T23:31:51Z","git_url":"git://github.com/heupr/test.git","ssh_url":"git@github.com:heupr/test.git","clone_url":"https://github.com/heupr/test.git","svn_url":"https://github.com/heupr/test","homepage":null,"size":0,"stargazers_count":0,"watchers_count":0,"language":null,"has_issues":true,"has_downloads":true,"has_wiki":true,"has_pages":false,"forks_count":0,"mirror_url":null,"open_issues_count":47,"forks":0,"open_issues":47,"watchers":0,"default_branch":"master"},"organization":{"login":"heupr","id":20547820,"url":"https://api.github.com/orgs/heupr","repos_url":"https://api.github.com/orgs/heupr/repos","events_url":"https://api.github.com/orgs/heupr/events","hooks_url":"https://api.github.com/orgs/heupr/hooks","issues_url":"https://api.github.com/orgs/heupr/issues","members_url":"https://api.github.com/orgs/heupr/members{/member}","public_members_url":"https://api.github.com/orgs/heupr/public_members{/member}","avatar_url":"https://avatars1.githubusercontent.com/u/20547820?v=3","description":"Machine learning-powered contributor integration"},"sender":{"login":"taylormike","id":15882362,"avatar_url":"https://avatars3.githubusercontent.com/u/15882362?v=3","gravatar_id":"","url":"https://api.github.com/users/taylormike","html_url":"https://github.com/taylormike","followers_url":"https://api.github.com/users/taylormike/followers","following_url":"https://api.github.com/users/taylormike/following{/other_user}","gists_url":"https://api.github.com/users/taylormike/gists{/gist_id}","starred_url":"https://api.github.com/users/taylormike/starred{/owner}{/repo}","subscriptions_url":"https://api.github.com/users/taylormike/subscriptions","organizations_url":"https://api.github.com/users/taylormike/orgs","repos_url":"https://api.github.com/users/taylormike/repos","events_url":"https://api.github.com/users/taylormike/events{/privacy}","received_events_url":"https://api.github.com/users/taylormike/received_events","type":"User","site_admin":false}}`)
+// var testPayload = []byte(`"issue":{
+//     "body":"\r\n/home/jzakiya/.rvm/log/1419522856_rbx-2.4.1/rake.log\r\nhttps://gist.github.com/jzakiya/bca4c6fd7e79992d7032",
+//     "closed_at":"2015-01-13T22:29:04Z",
+//     "comments":17,
+//     "created_at":"2014-12-25T18:42:17Z",
+//     "html_url":"https://github.com/rubinius/rubinius/issues/3255",
+//     "id":52869897,"locked":false,"number":3255,"state":"closed","title":"rbx 2.4.1 upgrade errors","updated_at":"2015-01-13T22:29:04Z","url":"https://api.github.com/repos/rubinius/rubinius/issues/3255","user":{"avatar_url":"https://avatars.githubusercontent.com/u/69856?v=3","events_url":"https://api.github.com/users/jzakiya/events{/privacy}","followers_url":"https://api.github.com/users/jzakiya/followers","following_url":"https://api.github.com/users/jzakiya/following{/other_user}","gists_url":"https://api.github.com/users/jzakiya/gists{/gist_id}","gravatar_id":"","html_url":"https://github.com/jzakiya","id":69856,"login":"jzakiya","organizations_url":"https://api.github.com/users/jzakiya/orgs","received_events_url":"https://api.github.com/users/jzakiya/received_events","repos_url":"https://api.github.com/users/jzakiya/repos","site_admin":false,"starred_url":"https://api.github.com/users/jzakiya/starred{/owner}{/repo}","subscriptions_url":"https://api.github.com/users/jzakiya/subscriptions","type":"User","url":"https://api.github.com/users/jzakiya"}}},"repo":{"fork":null,"has_downloads":null,"has_issues":null,"has_pages":null,"has_wiki":null,"id":27,"name":"rubinius/rubinius","private":null,"team_id":null,"url":"https://api.github.com/repos/rubinius/rubinius"}`)
+// var testPayload = []byte(`{"body":"\r\n/home/jzakiya/.rvm/log/1419522856_rbx-2.4.1/rake.log\r\nhttps://gist.github.com/jzakiya/bca4c6fd7e79992d7032","closed_at":"2015-01-13T22:29:04Z","comments":17,"created_at":"2014-12-25T18:42:17Z","html_url":"https://github.com/rubinius/rubinius/issues/3255","id":52869897,"locked":false,"number":3255,"state":"closed","title":"rbx 2.4.1 upgrade errors","updated_at":"2015-01-13T22:29:04Z","url":"https://api.github.com/repos/rubinius/rubinius/issues/3255","user":{"avatar_url":"https://avatars.githubusercontent.com/u/69856?v=3","events_url":"https://api.github.com/users/jzakiya/events{/privacy}","followers_url":"https://api.github.com/users/jzakiya/followers","following_url":"https://api.github.com/users/jzakiya/following{/other_user}","gists_url":"https://api.github.com/users/jzakiya/gists{/gist_id}","gravatar_id":"","html_url":"https://github.com/jzakiya","id":69856,"login":"jzakiya","organizations_url":"https://api.github.com/users/jzakiya/orgs","received_events_url":"https://api.github.com/users/jzakiya/received_events","repos_url":"https://api.github.com/users/jzakiya/repos","site_admin":false,"starred_url":"https://api.github.com/users/jzakiya/starred{/owner}{/repo}","subscriptions_url":"https://api.github.com/users/jzakiya/subscriptions","type":"User","url":"https://api.github.com/users/jzakiya"}}},"repo":{"fork":null,"has_downloads":null,"has_issues":null,"has_pages":null,"has_wiki":null,"id":27,"name":"rubinius/rubinius","private":null,"team_id":null,"url":"https://api.github.com/repos/rubinius/rubinius"}`)
+// var testPayload = []byte(`"body":"\r\n/home/jzakiya/.rvm/log/1419522856_rbx-2.4.1/rake.log\r\nhttps://gist.github.com/jzakiya/bca4c6fd7e79992d7032","closed_at":"2015-01-13T22:29:04Z","comments":17,"created_at":"2014-12-25T18:42:17Z","html_url":"https://github.com/rubinius/rubinius/issues/3255","id":52869897,"locked":false,"number":3255,"state":"closed","title":"rbx 2.4.1 upgrade errors","updated_at":"2015-01-13T22:29:04Z","url":"https://api.github.com/repos/rubinius/rubinius/issues/3255","user":{"avatar_url":"https://avatars.githubusercontent.com/u/69856?v=3","events_url":"https://api.github.com/users/jzakiya/events{/privacy}","followers_url":"https://api.github.com/users/jzakiya/followers","following_url":"https://api.github.com/users/jzakiya/following{/other_user}","gists_url":"https://api.github.com/users/jzakiya/gists{/gist_id}","gravatar_id":"","html_url":"https://github.com/jzakiya","id":69856,"login":"jzakiya","organizations_url":"https://api.github.com/users/jzakiya/orgs","received_events_url":"https://api.github.com/users/jzakiya/received_events","repos_url":"https://api.github.com/users/jzakiya/repos","site_admin":false,"starred_url":"https://api.github.com/users/jzakiya/starred{/owner}{/repo}","subscriptions_url":"https://api.github.com/users/jzakiya/subscriptions","type":"User","url":"https://api.github.com/users/jzakiya"}}},"repo":{"fork":null,"has_downloads":null,"has_issues":null,"has_pages":null,"has_wiki":null,"id":27,"name":"rubinius/rubinius","private":null,"team_id":null,"url":"https://api.github.com/repos/rubinius/rubinius"`)
+var testPayload = []byte(`{"issue":{"id":1}}`)
+// var testPayload = []byte(`"issue":null`)
 
-func (c *fakeConn) Query(query string, args []driver.Value) (driver.Rows, error) {
-	panic("QueryContext was not called.")
-}
-
-func (c *fakeConn) QueryContext(ctx context.Context, query string, args []NamedValue) (driver.Rows, error) {
-	err := checkSubsetTypes(c.db.allowAny, args)
-	if err != nil {
-		return nil, err
-	}
-	return nil, driver.ErrSkip
-}
-
-func errf(msg string, args ...interface{}) error {
-	return errors.New("fakedb: " + fmt.Sprintf(msg, args...))
-}
-
-// parts are table|selectCol1,selectCol2|whereCol=?,whereCol2=?
-// (note that where columns must always contain ? marks,
-// just a limitation for fakedb)
-func (c *fakeConn) prepareSelect(stmt *fakeStmt, parts []string) (*fakeStmt, error) {
-	if len(parts) != 3 {
-		stmt.Close()
-		return nil, errf("invalid SELECT syntax with %d parts; want 3", len(parts))
-	}
-	stmt.table = parts[0]
-
-	stmt.colName = strings.Split(parts[1], ",")
-	for n, colspec := range strings.Split(parts[2], ",") {
-		if colspec == "" {
+func backslashes(v []byte) []byte {
+	buf := make([]byte, 2*len(v))
+	pos := 0
+	for i := 0; i < len(v); i++ {
+		switch v[i] {
+		case '\x00':
+			buf[pos] = '\\'
+			buf[pos+1] = '0'
+			pos += 2
+		case '\n':
+			buf[pos] = '\\'
+			buf[pos+1] = 'n'
+			pos += 2
+		case '\r':
+			buf[pos] = '\\'
+			buf[pos+1] = 'r'
+			pos += 2
+		case '\x1a':
+			buf[pos] = '\\'
+			buf[pos+1] = 'Z'
+			pos += 2
+		case '\'':
+			buf[pos] = '\\'
+			buf[pos+1] = '\''
+			pos += 2
+		case '"':
+			buf[pos] = '\\'
+			buf[pos+1] = '"'
+			pos += 2
+		case '\\':
+			buf[pos] = '\\'
+			buf[pos+1] = '\\'
+			pos += 2
+		case '~': //sql delimeter
 			continue
-		}
-		nameVal := strings.Split(colspec, "=")
-		if len(nameVal) != 2 {
-			stmt.Close()
-			return nil, errf("SELECT on table %q has invalid column spec of %q (index %d)", stmt.table, colspec, n)
-		}
-		column, value := nameVal[0], nameVal[1]
-		_, ok := c.db.columnType(stmt.table, column)
-		if !ok {
-			stmt.Close()
-			return nil, errf("SELECT on table %q references non-existent column %q", stmt.table, column)
-		}
-		if !strings.HasPrefix(value, "?") {
-			stmt.Close()
-			return nil, errf("SELECT on table %q has pre-bound value for where column %q; need a question mark",
-				stmt.table, column)
-		}
-		stmt.placeholders++
-		stmt.whereCol = append(stmt.whereCol, boundCol{Column: column, Placeholder: value, Ordinal: stmt.placeholders})
-	}
-	return stmt, nil
-}
-
-// parts are table|col=type,col2=type2
-func (c *fakeConn) prepareCreate(stmt *fakeStmt, parts []string) (*fakeStmt, error) {
-	if len(parts) != 2 {
-		stmt.Close()
-		return nil, errf("invalid CREATE syntax with %d parts; want 2", len(parts))
-	}
-	stmt.table = parts[0]
-	for n, colspec := range strings.Split(parts[1], ",") {
-		nameType := strings.Split(colspec, "=")
-		if len(nameType) != 2 {
-			stmt.Close()
-			return nil, errf("CREATE table %q has invalid column spec of %q (index %d)", stmt.table, colspec, n)
-		}
-		stmt.colName = append(stmt.colName, nameType[0])
-		stmt.colType = append(stmt.colType, nameType[1])
-	}
-	return stmt, nil
-}
-
-// parts are table|col=?,col2=val
-func (c *fakeConn) prepareInsert(stmt *fakeStmt, parts []string) (*fakeStmt, error) {
-	if len(parts) != 2 {
-		stmt.Close()
-		return nil, errf("invalid INSERT syntax with %d parts; want 2", len(parts))
-	}
-	stmt.table = parts[0]
-	for n, colspec := range strings.Split(parts[1], ",") {
-		nameVal := strings.Split(colspec, "=")
-		if len(nameVal) != 2 {
-			stmt.Close()
-			return nil, errf("INSERT table %q has invalid column spec of %q (index %d)", stmt.table, colspec, n)
-		}
-		column, value := nameVal[0], nameVal[1]
-		ctype, ok := c.db.columnType(stmt.table, column)
-		if !ok {
-			stmt.Close()
-			return nil, errf("INSERT table %q references non-existent column %q", stmt.table, column)
-		}
-		stmt.colName = append(stmt.colName, column)
-
-		if !strings.HasPrefix(value, "?") {
-			var subsetVal interface{}
-			// Convert to driver subset type
-			switch ctype {
-			case "string":
-				subsetVal = []byte(value)
-			case "blob":
-				subsetVal = []byte(value)
-			case "int32":
-				i, err := strconv.Atoi(value)
-				if err != nil {
-					stmt.Close()
-					return nil, errf("invalid conversion to int32 from %q", value)
-				}
-				subsetVal = int64(i) // int64 is a subset type, but not int32
-			default:
-				stmt.Close()
-				return nil, errf("unsupported conversion for pre-bound parameter %q to type %q", value, ctype)
-			}
-			stmt.colValue = append(stmt.colValue, subsetVal)
-		} else {
-			stmt.placeholders++
-			stmt.placeholderConverter = append(stmt.placeholderConverter, converterForType(ctype))
-			stmt.colValue = append(stmt.colValue, value)
-		}
-	}
-	return stmt, nil
-}
-
-var hookPrepareBadConn func() bool
-
-func (c *fakeConn) Prepare(query string) (driver.Stmt, error) {
-	panic("use PrepareContext")
-}
-
-func (c *fakeConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
-	c.numPrepare++
-	if c.db == nil {
-		panic("nil c.db; conn = " + fmt.Sprintf("%#v", c))
-	}
-
-	if c.stickyBad || (hookPrepareBadConn != nil && hookPrepareBadConn()) {
-		return nil, driver.ErrBadConn
-	}
-
-	var firstStmt, prev *fakeStmt
-	for _, query := range strings.Split(query, ";") {
-		parts := strings.Split(query, "|")
-		if len(parts) < 1 {
-			return nil, errf("empty query")
-		}
-		stmt := &fakeStmt{q: query, c: c}
-		if firstStmt == nil {
-			firstStmt = stmt
-		}
-		if len(parts) >= 3 {
-			switch parts[0] {
-			case "PANIC":
-				stmt.panic = parts[1]
-				parts = parts[2:]
-			case "WAIT":
-				wait, err := time.ParseDuration(parts[1])
-				if err != nil {
-					return nil, errf("expected section after WAIT to be a duration, got %q %v", parts[1], err)
-				}
-				parts = parts[2:]
-				stmt.wait = wait
-			}
-		}
-		cmd := parts[0]
-		stmt.cmd = cmd
-		parts = parts[1:]
-
-		if stmt.wait > 0 {
-			wait := time.NewTimer(stmt.wait)
-			select {
-			case <-wait.C:
-			case <-ctx.Done():
-				wait.Stop()
-				return nil, ctx.Err()
-			}
-		}
-
-		c.incrStat(&c.stmtsMade)
-		var err error
-		switch cmd {
-		case "WIPE":
-			// Nothing
-		case "SELECT":
-			stmt, err = c.prepareSelect(stmt, parts)
-		case "CREATE":
-			stmt, err = c.prepareCreate(stmt, parts)
-		case "INSERT":
-			stmt, err = c.prepareInsert(stmt, parts)
-		case "NOSERT":
-			// Do all the prep-work like for an INSERT but don't actually insert the row.
-			// Used for some of the concurrent tests.
-			stmt, err = c.prepareInsert(stmt, parts)
 		default:
-			stmt.Close()
-			return nil, errf("unsupported command type %q", cmd)
-		}
-		if err != nil {
-			return nil, err
-		}
-		if prev != nil {
-			prev.next = stmt
-		}
-		prev = stmt
-	}
-	return firstStmt, nil
-}
-
-func (s *fakeStmt) ColumnConverter(idx int) driver.ValueConverter {
-	if s.panic == "ColumnConverter" {
-		panic(s.panic)
-	}
-	if len(s.placeholderConverter) == 0 {
-		return driver.DefaultParameterConverter
-	}
-	return s.placeholderConverter[idx]
-}
-
-func (s *fakeStmt) Close() error {
-	if s.panic == "Close" {
-		panic(s.panic)
-	}
-	if s.c == nil {
-		panic("nil conn in fakeStmt.Close")
-	}
-	if s.c.db == nil {
-		panic("in fakeStmt.Close, conn's db is nil (already closed)")
-	}
-	if !s.closed {
-		s.c.incrStat(&s.c.stmtsClosed)
-		s.closed = true
-	}
-	if s.next != nil {
-		s.next.Close()
-	}
-	return nil
-}
-
-var errClosed = errors.New("fakedb: statement has been closed")
-
-var hookExecBadConn func() bool
-
-func (s *fakeStmt) Exec(args []driver.Value) (driver.Result, error) {
-	panic("Using ExecContext")
-}
-func (s *fakeStmt) ExecContext(ctx context.Context, args []NamedValue) (driver.Result, error) {
-	if s.panic == "Exec" {
-		panic(s.panic)
-	}
-	if s.closed {
-		return nil, errClosed
-	}
-
-	if s.c.stickyBad || (hookExecBadConn != nil && hookExecBadConn()) {
-		return nil, driver.ErrBadConn
-	}
-
-	err := checkSubsetTypes(s.c.db.allowAny, args)
-	if err != nil {
-		return nil, err
-	}
-
-	if s.wait > 0 {
-		time.Sleep(s.wait)
-	}
-
-	select {
-	default:
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-
-	db := s.c.db
-	switch s.cmd {
-	case "WIPE":
-		db.wipe()
-		return driver.ResultNoRows, nil
-	case "CREATE":
-		if err := db.createTable(s.table, s.colName, s.colType); err != nil {
-			return nil, err
-		}
-		return driver.ResultNoRows, nil
-	case "INSERT":
-		return s.execInsert(args, true)
-	case "NOSERT":
-		return s.execInsert(args, false)
-	}
-	fmt.Printf("EXEC statement, cmd=%q: %#v\n", s.cmd, s)
-	return nil, fmt.Errorf("unimplemented statement Exec command type of %q", s.cmd)
-}
-
-func (s *fakeStmt) execInsert(args []NamedValue, doInsert bool) (driver.Result, error) {
-	db := s.c.db
-	if len(args) != s.placeholders {
-		panic("error in pkg db; should only get here if size is correct")
-	}
-	db.mu.Lock()
-	t, ok := db.table(s.table)
-	db.mu.Unlock()
-	if !ok {
-		return nil, fmt.Errorf("fakedb: table %q doesn't exist", s.table)
-	}
-
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	var cols []interface{}
-	if doInsert {
-		cols = make([]interface{}, len(t.colname))
-	}
-	argPos := 0
-	for n, colname := range s.colName {
-		colidx := t.columnIndex(colname)
-		if colidx == -1 {
-			return nil, fmt.Errorf("fakedb: column %q doesn't exist or dropped since prepared statement was created", colname)
-		}
-		var val interface{}
-		if strvalue, ok := s.colValue[n].(string); ok && strings.HasPrefix(strvalue, "?") {
-			if strvalue == "?" {
-				val = args[argPos].Value
-			} else {
-				// Assign value from argument placeholder name.
-				for _, a := range args {
-					if a.Name == strvalue[1:] {
-						val = a.Value
-						break
-					}
-				}
-			}
-			argPos++
-		} else {
-			val = s.colValue[n]
-		}
-		if doInsert {
-			cols[colidx] = val
+			buf[pos] = v[i]
+			pos++
 		}
 	}
-
-	if doInsert {
-		t.rows = append(t.rows, &row{cols: cols})
-	}
-	return driver.RowsAffected(1), nil
+	v = buf[:pos]
+	return v
 }
 
-var hookQueryBadConn func() bool
-
-func (s *fakeStmt) Query(args []driver.Value) (driver.Rows, error) {
-	panic("Use QueryContext")
-}
-
-func (s *fakeStmt) QueryContext(ctx context.Context, args []NamedValue) (driver.Rows, error) {
-	if s.panic == "Query" {
-		panic(s.panic)
-	}
-	if s.closed {
-		return nil, errClosed
-	}
-
-	if s.c.stickyBad || (hookQueryBadConn != nil && hookQueryBadConn()) {
-		return nil, driver.ErrBadConn
-	}
-
-	err := checkSubsetTypes(s.c.db.allowAny, args)
-	if err != nil {
-		return nil, err
-	}
-
-	db := s.c.db
-	if len(args) != s.placeholders {
-		panic("error in pkg db; should only get here if size is correct")
-	}
-
-	setMRows := make([][]*row, 0, 1)
-	setColumns := make([][]string, 0, 1)
-	setColType := make([][]string, 0, 1)
-
-	for {
-		db.mu.Lock()
-		t, ok := db.table(s.table)
-		db.mu.Unlock()
-		if !ok {
-			return nil, fmt.Errorf("fakedb: table %q doesn't exist", s.table)
-		}
-
-		if s.table == "magicquery" {
-			if len(s.whereCol) == 2 && s.whereCol[0].Column == "op" && s.whereCol[1].Column == "millis" {
-				if args[0].Value == "sleep" {
-					time.Sleep(time.Duration(args[1].Value.(int64)) * time.Millisecond)
-				}
-			}
-		}
-
-		t.mu.Lock()
-
-		colIdx := make(map[string]int) // select column name -> column index in table
-		for _, name := range s.colName {
-			idx := t.columnIndex(name)
-			if idx == -1 {
-				t.mu.Unlock()
-				return nil, fmt.Errorf("fakedb: unknown column name %q", name)
-			}
-			colIdx[name] = idx
-		}
-
-		mrows := []*row{}
-	rows:
-		for _, trow := range t.rows {
-			for _, wcol := range s.whereCol {
-				idx := t.columnIndex(wcol.Column)
-				if idx == -1 {
-					t.mu.Unlock()
-					return nil, fmt.Errorf("db: invalid where clause column %q", wcol)
-				}
-				tcol := trow.cols[idx]
-				if bs, ok := tcol.([]byte); ok {
-					// lazy hack to avoid sprintf %v on a []byte
-					tcol = string(bs)
-				}
-				var argValue interface{}
-				if wcol.Placeholder == "?" {
-					argValue = args[wcol.Ordinal-1].Value
-				} else {
-					// Assign arg value from placeholder name.
-					for _, a := range args {
-						if a.Name == wcol.Placeholder[1:] {
-							argValue = a.Value
-							break
-						}
-					}
-				}
-				if fmt.Sprintf("%v", tcol) != fmt.Sprintf("%v", argValue) {
-					continue rows
-				}
-			}
-			mrow := &row{cols: make([]interface{}, len(s.colName))}
-			for seli, name := range s.colName {
-				mrow.cols[seli] = trow.cols[colIdx[name]]
-			}
-			mrows = append(mrows, mrow)
-		}
-
-		var colType []string
-		for _, column := range s.colName {
-			colType = append(colType, t.coltype[t.columnIndex(column)])
-		}
-
-		t.mu.Unlock()
-
-		setMRows = append(setMRows, mrows)
-		setColumns = append(setColumns, s.colName)
-		setColType = append(setColType, colType)
-
-		if s.next == nil {
-			break
-		}
-		s = s.next
-	}
-
-	cursor := &rowsCursor{
-		posRow:  -1,
-		rows:    setMRows,
-		cols:    setColumns,
-		colType: setColType,
-		errPos:  -1,
-	}
-	return cursor, nil
-}
-
-func (s *fakeStmt) NumInput() int {
-	if s.panic == "NumInput" {
-		panic(s.panic)
-	}
-	return s.placeholders
-}
-
-var hookCommitBadConn func() bool
-
-func (tx *fakeTx) Commit() error {
-	tx.c.currTx = nil
-	if hookCommitBadConn != nil && hookCommitBadConn() {
-		return driver.ErrBadConn
-	}
-	return nil
-}
-
-var hookRollbackBadConn func() bool
-
-func (tx *fakeTx) Rollback() error {
-	tx.c.currTx = nil
-	if hookRollbackBadConn != nil && hookRollbackBadConn() {
-		return driver.ErrBadConn
-	}
-	return nil
-}
-
-type rowsCursor struct {
-	cols       [][]string
-	colType    [][]string
-	posSet     int
-	posRow     int
-	rows       [][]*row
-	closed     bool
-	errPos     int
-	err        error
-	bytesClone map[*byte][]byte
-}
-
-func (rc *rowsCursor) Close() error {
-	if !rc.closed {
-		for _, bs := range rc.bytesClone {
-			bs[0] = 255 // first byte corrupted
+func ctrlExt(str []byte) []byte {
+	b := make([]byte, len(str))
+	var bl int
+	for i := 0; i < len(str); i++ {
+		c := str[i]
+		if c >= 32 && c < 127 {
+			b[bl] = c
+			bl++
 		}
 	}
-	rc.closed = true
-	return nil
-}
-
-func (rc *rowsCursor) Columns() []string {
-	return rc.cols[rc.posSet]
-}
-
-func (rc *rowsCursor) ColumnTypeScanType(index int) reflect.Type {
-	return colTypeToReflectType(rc.colType[rc.posSet][index])
-}
-
-var rowsCursorNextHook func(dest []driver.Value) error
-
-func (rc *rowsCursor) Next(dest []driver.Value) error {
-	if rowsCursorNextHook != nil {
-		return rowsCursorNextHook(dest)
-	}
-
-	if rc.closed {
-		return errors.New("fakedb: cursor is closed")
-	}
-	rc.posRow++
-	if rc.posRow == rc.errPos {
-		return rc.err
-	}
-	if rc.posRow >= len(rc.rows[rc.posSet]) {
-		return io.EOF // per interface spec
-	}
-	for i, v := range rc.rows[rc.posSet][rc.posRow].cols {
-		dest[i] = v
-
-		if bs, ok := v.([]byte); ok {
-			if rc.bytesClone == nil {
-				rc.bytesClone = make(map[*byte][]byte)
-			}
-			clone, ok := rc.bytesClone[&bs[0]]
-			if !ok {
-				clone = make([]byte, len(bs))
-				copy(clone, bs)
-				rc.bytesClone[&bs[0]] = clone
-			}
-			dest[i] = clone
-		}
-	}
-	return nil
-}
-
-func (rc *rowsCursor) HasNextResultSet() bool {
-	return rc.posSet < len(rc.rows)-1
-}
-
-func (rc *rowsCursor) NextResultSet() error {
-	if rc.HasNextResultSet() {
-		rc.posSet++
-		rc.posRow = -1
-		return nil
-	}
-	return io.EOF // Per interface spec.
-}
-
-type fakeDriverString struct{}
-
-func (fakeDriverString) ConvertValue(v interface{}) (driver.Value, error) {
-	switch c := v.(type) {
-	case string, []byte:
-		return v, nil
-	case *string:
-		if c == nil {
-			return nil, nil
-		}
-		return *c, nil
-	}
-	return fmt.Sprintf("%v", v), nil
-}
-
-type anyTypeConverter struct{}
-
-func (anyTypeConverter) ConvertValue(v interface{}) (driver.Value, error) {
-	return v, nil
-}
-
-func converterForType(typ string) driver.ValueConverter {
-	switch typ {
-	case "bool":
-		return driver.Bool
-	case "nullbool":
-		return driver.Null{Converter: driver.Bool}
-	case "int32":
-		return driver.Int32
-	case "string":
-		return driver.NotNull{Converter: fakeDriverString{}}
-	case "nullstring":
-		return driver.Null{Converter: fakeDriverString{}}
-	case "int64":
-		// TODO(coopernurse): add type-specific converter
-		return driver.NotNull{Converter: driver.DefaultParameterConverter}
-	case "nullint64":
-		// TODO(coopernurse): add type-specific converter
-		return driver.Null{Converter: driver.DefaultParameterConverter}
-	case "float64":
-		// TODO(coopernurse): add type-specific converter
-		return driver.NotNull{Converter: driver.DefaultParameterConverter}
-	case "nullfloat64":
-		// TODO(coopernurse): add type-specific converter
-		return driver.Null{Converter: driver.DefaultParameterConverter}
-	case "datetime":
-		return driver.DefaultParameterConverter
-	case "any":
-		return anyTypeConverter{}
-	}
-	panic("invalid fakedb column type of " + typ)
-}
-
-func colTypeToReflectType(typ string) reflect.Type {
-	switch typ {
-	case "bool":
-		return reflect.TypeOf(false)
-	case "nullbool":
-		return reflect.TypeOf(sql.NullBool{})
-	case "int32":
-		return reflect.TypeOf(int32(0))
-	case "string":
-		return reflect.TypeOf("")
-	case "nullstring":
-		return reflect.TypeOf(sql.NullString{})
-	case "int64":
-		return reflect.TypeOf(int64(0))
-	case "nullint64":
-		return reflect.TypeOf(sql.NullInt64{})
-	case "float64":
-		return reflect.TypeOf(float64(0))
-	case "nullfloat64":
-		return reflect.TypeOf(sql.NullFloat64{})
-	case "datetime":
-		return reflect.TypeOf(time.Time{})
-	case "any":
-		return reflect.TypeOf(new(interface{})).Elem()
-	}
-	panic("invalid fakedb column type of " + typ)
-}
-
-func newTestDB(t testing.TB, query string, args ...interface{}) *sql.DB {
-    sql.Register(driverName, fdriver)
-    db, err := sql.Open(driverName, sourceName)
-    if err != nil {
-        t.Fatalf("build new test database: %v", err)
-    }
-    _, err = db.Exec("DELETE * FROM ?", sourceName)
-
-    if err != nil {
-        t.Fatalf("clearing test database: %v", err)
-    }
-    _, err = db.Exec(query, args...)
-    if err != nil {
-        t.Fatalf("populating test database: %v", err)
-    }
-    return db
+	str = b[:bl]
+	return str
 }
