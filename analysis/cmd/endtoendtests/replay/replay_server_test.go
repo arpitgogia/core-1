@@ -2,13 +2,13 @@ package replay
 
 import (
 	"bytes"
-	"coralreefci/engine/gateway"
+	//	"coralreefci/engine/gateway"
 	"coralreefci/engine/ingestor"
 	"encoding/json"
 	"fmt"
-	"github.com/google/go-github/github"
-	"github.com/pkg/profile"
-	"net/url"
+	//	"github.com/google/go-github/github"
+	//	"github.com/pkg/profile"
+	//	"net/url"
 	"os"
 	"testing"
 	//"runtime"
@@ -20,10 +20,10 @@ var ingestorServer ingestor.IngestorServer
 
 func setup() {
 	//runtime.GOMAXPROCS(runtime.NumCPU())
-	db = ingestor.Database{}
+	bufferPool := ingestor.NewPool()
+	db = ingestor.Database{BufferPool: bufferPool}
 	db.Open()
-
-	bs = BacktestServer{DB: &db}
+	bs := BacktestServer{DB: &db}
 	go bs.Start()
 
 	dispatcher := ingestor.Dispatcher{}
@@ -44,6 +44,7 @@ func TestMain(m *testing.M) {
 	os.Exit(retCode)
 }
 
+/*
 func Test_GetIssues(t *testing.T) {
 	client := github.NewClient(nil)
 	url, _ := url.Parse(localPath)
@@ -52,12 +53,14 @@ func Test_GetIssues(t *testing.T) {
 	newGateway := gateway.Gateway{Client: client}
 	githubIssues, _ := newGateway.GetIssues("dotnet", "corefx")
 	fmt.Println(githubIssues[0])
-}
+} */
 
+/*
 func Test_Replay(t *testing.T) {
 	org := "dotnet"
 	repo := "corefx"
 	events, _ := db.ReadBacktestEvents(org + "/" + repo)
+	defer profile.Start().Stop()
 	for i := 0; i < len(events); i++ {
 		events[i].Payload.Repo = &events[i].Repo
 		payload, _ := json.Marshal(events[i].Payload)
@@ -78,6 +81,64 @@ func Test_Replay2(t *testing.T) {
 	}
 	fmt.Println("#Events Replayed:", len(events))
 }
+
+func Test_Replay3(t *testing.T) {
+	org := "Khan"
+	repo := "khan-i18n"
+	events, _ := db.ReadBacktestEvents(org + "/" + repo)
+	defer profile.Start().Stop()
+	for i := 0; i < len(events); i++ {
+		events[i].Payload.Repo = &events[i].Repo
+		payload, _ := json.Marshal(events[i].Payload)
+		bs.HTTPPost(bytes.NewBuffer(payload))
+	}
+	fmt.Println("#Events Replayed:", len(events))
+}*/
+
+/*
+func Test_Replay4(t *testing.T) {
+	org := "paramiko"
+	repo := "paramiko"
+	events, _ := db.ReadBacktestEvents(org + "/" + repo)
+	for i := 0; i < len(events); i++ {
+		payload, _ := json.Marshal(events[i].Payload)
+		bs.HTTPPost(bytes.NewBuffer(payload), "pull_request")
+	}
+  fmt.Println("#Events Replayed:", len(events))
+}*/
+
+func Test_Replay5(t *testing.T) {
+	var event string
+	org := "antlr"
+	repo := "antlr4"
+	events, err := db.ReadBacktestEvents(org + "/" + repo)
+	fmt.Println(err)
+	for i := 0; i < len(events); i++ {
+		m := events[i].Payload.(map[string]interface{})
+		m["repository"] = &events[i].Repo // Workaround
+		payload, _ := json.Marshal(m)
+		if events[i].Type == "PullRequestEvent" {
+			event = "pull_request"
+		} else {
+			event = "issues"
+		}
+		bs.HTTPPost(bytes.NewBuffer(payload), event)
+	}
+	fmt.Println("#Events Replayed:", len(events))
+}
+
+/*
+func Test_ReplayFastExperimental(t *testing.T) {
+	org := "wagn"
+	repo := "wagn"
+	events, err := db.ReadBacktestEventsFast(org + "/" + repo)
+	fmt.Println(err)
+	for i := 0; i < len(events); i++ {
+		//payload, _ := json.Marshal(events[i].Payload)
+		bs.HTTPPost(bytes.NewBuffer(events[i].Payload), "pull_request")
+	}
+  fmt.Println("#Events Replayed:", len(events))
+} */
 
 /*
 func Test_WebhookDupe(t *testing.T) {

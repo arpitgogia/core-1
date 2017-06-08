@@ -11,9 +11,16 @@ import (
 )
 
 type Event struct {
-	Type    string             `json:"type"`
-	Repo    github.Repository  `json:"repo"`
-	Payload github.IssuesEvent `json:"payload"`
+	Type    string            `json:"type"`
+	Repo    github.Repository `json:"repo"`
+	Action  string            `json:"action"`
+	Payload interface{}       `json:"payload"`
+}
+
+type FastEvent struct {
+	Type    string            `json:"type"`
+	Repo    github.Repository `json:"repo"`
+	Payload json.RawMessage   `json:"payload"`
 }
 
 type Value interface{}
@@ -54,7 +61,19 @@ func (d *Database) BulkInsertBacktestEvents(events []*Event) {
 		buffer.AppendByte('~')
 		buffer.AppendString(*events[i].Repo.Name)
 		buffer.AppendByte('~')
-		payload, _ := json.Marshal(*events[i])
+		if events[i].Action == "closed" {
+			buffer.AppendInt(0)
+		} else {
+			buffer.AppendInt(1)
+		}
+		buffer.AppendByte('~')
+		if events[i].Type == "PullRequestEvent" {
+			buffer.AppendInt(0)
+		} else {
+			buffer.AppendInt(1)
+		}
+		buffer.AppendByte('~')
+		payload, _ := json.Marshal(events[i])
 		_, _ = buffer.Write(escapeBytesBackslash(stripCtlAndExtFromBytes(payload)))
 		buffer.AppendByte('\n')
 	}
@@ -67,7 +86,7 @@ func (d *Database) BulkInsertBacktestEvents(events []*Event) {
 		return sqlBuffer
 	})
 	defer mysql.DeregisterReaderHandler("data")
-	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE backtest_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,repo_name,payload)")
+	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE backtest_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,repo_name,is_closed,is_pr,payload)")
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -88,7 +107,39 @@ func (d *Database) ReadBacktestEvents(repo string) ([]Event, error) {
 		if err != nil {
 			return nil, err
 		}
-		json.Unmarshal(payload, &event)
+		decoder := json.NewDecoder(bytes.NewReader(payload))
+		decoder.UseNumber()
+		if err := decoder.Decode(&event); err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	err = results.Err()
+	if err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+func (d *Database) ReadBacktestEventsFast(repo string) ([]FastEvent, error) {
+	events := []FastEvent{}
+	var payload []byte
+	results, err := d.db.Query("select payload from backtest_events where repo_name=?", repo)
+	if err != nil {
+		return nil, err
+	}
+	defer results.Close()
+	for results.Next() {
+		var event FastEvent
+		err := results.Scan(&payload)
+		if err != nil {
+			return nil, err
+		}
+		decoder := json.NewDecoder(bytes.NewReader(payload))
+		decoder.UseNumber()
+		if err := decoder.Decode(&event); err != nil {
+			return nil, err
+		}
 		events = append(events, event)
 	}
 	err = results.Err()

@@ -20,7 +20,8 @@ func (r *RepoInitializer) LoadRepos() {
 }
 
 func (r *RepoInitializer) AddRepo(repo AuthenticatedRepo) {
-	db := Database{}
+	bufferPool := NewPool()
+	db := Database{BufferPool: bufferPool}
 	db.Open()
 	newGateway := gateway.Gateway{Client: repo.Client}
 	githubIssues, _ := newGateway.GetIssues(*repo.Repo.Organization.Name, *repo.Repo.Name)

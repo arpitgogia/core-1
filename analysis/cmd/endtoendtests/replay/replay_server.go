@@ -21,6 +21,7 @@ import (
 	"github.com/gorilla/mux"
 	//"coralreefci/engine/onboarder"
 	// "coralreefci/models"
+	"runtime/debug"
 	"time"
 )
 
@@ -73,6 +74,7 @@ func (b *BacktestServer) LoadArchive(path string) {
 	case mode.IsDir():
 		files, _ := ioutil.ReadDir(path)
 		loadedFiles := 0
+		inserts := 0
 		totalFiles := len(files)
 		err := filepath.Walk(path, func(path string, f os.FileInfo, err error) error {
 			parseErr := b.parseFile(path)
@@ -82,10 +84,14 @@ func (b *BacktestServer) LoadArchive(path string) {
 			} else {
 				fmt.Println(parseErr)
 			}
-			if loadedFiles > 0 && loadedFiles%50 == 0 {
+			if inserts%2 == 0 {
+				debug.FreeOSMemory()
+			}
+			if loadedFiles > 0 && loadedFiles%10 == 0 {
 				b.DB.BulkInsertBacktestEvents(b.events)
 				for i := 0; i < len(b.events); i++ {
 					RecycleEvent(b.events[i])
+					inserts++
 				}
 				b.events = []*ingestor.Event{}
 				fmt.Printf("Inserted %d out of %d files\n", loadedFiles, totalFiles)
@@ -122,6 +128,7 @@ func (b *BacktestServer) parseFile(filename string) error {
 	}
 	defer gr.Close()
 	jd := json.NewDecoder(gr)
+	jd.UseNumber()
 	for {
 		e := GetEvent()
 		if err := jd.Decode(&e); err == io.EOF {
@@ -130,9 +137,12 @@ func (b *BacktestServer) parseFile(filename string) error {
 			return err
 		}
 		switch e.Type {
-		case "IssuesEvent":
-			//case "PullRequestEvent":
+		case "IssuesEvent": //,"PullRequestEvent":
+			m := e.Payload.(map[string]interface{})
+			e.Action = m["action"].(string) // Workaround
 			b.events = append(b.events, e)
+		default:
+			RecycleEvent(e)
 		}
 	}
 	return nil
@@ -176,6 +186,7 @@ func (b *BacktestServer) backtestPredict(w http.ResponseWriter, r *http.Request)
 
 }
 
+//TODO Fix
 func (b *BacktestServer) getIssues(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	org := vars["org"]
@@ -184,11 +195,11 @@ func (b *BacktestServer) getIssues(w http.ResponseWriter, r *http.Request) {
 	issues := make([]*github.Issue, len(events))
 	if webhooksplit == 1 {
 		for i := 0; i < len(events); i++ {
-			issues[i] = events[i].Payload.Issue
+			issues[i] = nil //events[i].Payload.Issue //TODO Fix
 		}
 	} else {
 		for i := 0; i < int(float32(len(events))/webhooksplit); i++ {
-			issues[i] = events[i].Payload.Issue
+			issues[i] = nil //events[i].Payload.Issue //TODO Fix
 		}
 		for i := int(float32(len(events)) / webhooksplit); i < len(events); i++ {
 			b.WebhookEvents = append(b.WebhookEvents, events[i])
@@ -198,12 +209,12 @@ func (b *BacktestServer) getIssues(w http.ResponseWriter, r *http.Request) {
 	w.Write(payload)
 }
 
-func (b *BacktestServer) HTTPPost(payload *bytes.Buffer) {
+func (b *BacktestServer) HTTPPost(payload *bytes.Buffer, event string) {
 	req, err := http.NewRequest("POST", "http://localhost:8080/hook", payload)
 	if err != nil {
 		fmt.Println(err)
 	}
-	req.Header.Set("X-Github-Event", "issues")
+	req.Header.Set("X-Github-Event", event)
 	req.Header.Set("X-GitHub-Delivery", "placeholder")
 	req.Header.Set("content-type", "application/json")
 	mac := hmac.New(sha1.New, []byte(secretKey))
