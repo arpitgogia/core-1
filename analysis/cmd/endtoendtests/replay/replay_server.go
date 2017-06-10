@@ -191,15 +191,16 @@ func (b *BacktestServer) getIssues(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	org := vars["org"]
 	repo := vars["repo"]
-	events, _ := b.DB.ReadBacktestEvents(org + "/" + repo)
+	queryParams := ingestor.EventQuery{Type: ingestor.Issue, Repo: org + "/" + repo}
+	events, _ := b.DB.ReadBacktestEvents(queryParams)
 	issues := make([]*github.Issue, len(events))
 	if webhooksplit == 1 {
 		for i := 0; i < len(events); i++ {
-			issues[i] = nil //events[i].Payload.Issue //TODO Fix
+			issues[i] = events[i].Payload.(*github.Issue)
 		}
 	} else {
 		for i := 0; i < int(float32(len(events))/webhooksplit); i++ {
-			issues[i] = nil //events[i].Payload.Issue //TODO Fix
+			issues[i] = events[i].Payload.(*github.Issue)
 		}
 		for i := int(float32(len(events)) / webhooksplit); i < len(events); i++ {
 			b.WebhookEvents = append(b.WebhookEvents, events[i])

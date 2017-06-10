@@ -111,7 +111,8 @@ func Test_Replay5(t *testing.T) {
 	var event string
 	org := "antlr"
 	repo := "antlr4"
-	events, err := db.ReadBacktestEvents(org + "/" + repo)
+	queryParams := ingestor.EventQuery{Repo: org + "/" + repo}
+	events, err := db.ReadBacktestEvents(queryParams)
 	fmt.Println(err)
 	for i := 0; i < len(events); i++ {
 		m := events[i].Payload.(map[string]interface{})

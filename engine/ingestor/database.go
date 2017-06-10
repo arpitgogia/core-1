@@ -17,17 +17,24 @@ type Event struct {
 	Payload interface{}       `json:"payload"`
 }
 
-type FastEvent struct {
-	Type    string            `json:"type"`
-	Repo    github.Repository `json:"repo"`
-	Payload json.RawMessage   `json:"payload"`
-}
-
 type Value interface{}
 
 type Database struct {
 	db         *sql.DB
 	BufferPool Pool
+}
+
+type EventType int
+
+const (
+	PullRequest EventType = iota
+	Issue
+	All
+)
+
+type EventQuery struct {
+	Type EventType
+	Repo string
 }
 
 func (d *Database) Open() {
@@ -86,17 +93,26 @@ func (d *Database) BulkInsertBacktestEvents(events []*Event) {
 		return sqlBuffer
 	})
 	defer mysql.DeregisterReaderHandler("data")
-	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE backtest_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,repo_name,is_closed,is_pr,payload)")
+	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE backtest_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,repo_name,is_closed,is_pull,payload)")
 	if err != nil {
 		fmt.Println(err)
 	}
 	sqlBuffer.Reset()
 }
 
-func (d *Database) ReadBacktestEvents(repo string) ([]Event, error) {
+func (d *Database) ReadBacktestEvents(params EventQuery) ([]Event, error) {
 	events := []Event{}
 	var payload []byte
-	results, err := d.db.Query("select payload from backtest_events where repo_name=?", repo)
+	var results *sql.Rows
+	var err error
+	switch t := params.Type; t {
+	case PullRequest:
+		results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_pull=?", params.Repo, 1)
+	case Issue:
+		results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_pull=?", params.Repo, 0)
+	default:
+		results, err = d.db.Query("select payload from backtest_events where repo_name=?", params.Repo)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -121,37 +137,9 @@ func (d *Database) ReadBacktestEvents(repo string) ([]Event, error) {
 	return events, nil
 }
 
-func (d *Database) ReadBacktestEventsFast(repo string) ([]FastEvent, error) {
-	events := []FastEvent{}
-	var payload []byte
-	results, err := d.db.Query("select payload from backtest_events where repo_name=?", repo)
-	if err != nil {
-		return nil, err
-	}
-	defer results.Close()
-	for results.Next() {
-		var event FastEvent
-		err := results.Scan(&payload)
-		if err != nil {
-			return nil, err
-		}
-		decoder := json.NewDecoder(bytes.NewReader(payload))
-		decoder.UseNumber()
-		if err := decoder.Decode(&event); err != nil {
-			return nil, err
-		}
-		events = append(events, event)
-	}
-	err = results.Err()
-	if err != nil {
-		return nil, err
-	}
-	return events, nil
-}
-
 func (d *Database) InsertIssue(issue github.Issue) {
 	var buffer bytes.Buffer
-	eventsInsert := "INSERT INTO github_events(repo_id,issues_id,number,payload,is_pr,is_closed) VALUES"
+	eventsInsert := "INSERT INTO github_events(repo_id,issues_id,number,payload,is_pull,is_closed) VALUES"
 	eventsValuesFmt := "(?,?,?,?,0,?)"
 	numValues := 5
 
@@ -205,7 +193,7 @@ func (d *Database) BulkInsertIssues(issues []*github.Issue) {
 		return sqlBuffer
 	})
 	defer mysql.DeregisterReaderHandler("data")
-	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE github_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,issues_id,number,payload,is_pr,is_closed)")
+	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE github_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,issues_id,number,payload,is_pull,is_closed)")
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -213,7 +201,7 @@ func (d *Database) BulkInsertIssues(issues []*github.Issue) {
 
 func (d *Database) InsertPullRequest(pull github.PullRequest) {
 	var buffer bytes.Buffer
-	eventsInsert := "INSERT INTO github_events(payload,is_pr,is_closed) VALUES"
+	eventsInsert := "INSERT INTO github_events(payload,is_pull,is_closed) VALUES"
 	eventsValuesFmt := "(?,1,?)"
 	numValues := 2
 
@@ -262,7 +250,7 @@ func (d *Database) BulkInsertPullRequests(pulls []*github.PullRequest) {
 		return sqlBuffer
 	})
 	defer mysql.DeregisterReaderHandler("data")
-	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE github_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,issues_id,number,payload,is_pr,is_closed)")
+	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE github_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,issues_id,number,payload,is_pull,is_closed)")
 	if err != nil {
 		fmt.Println(err)
 	}
