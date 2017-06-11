@@ -1,4 +1,4 @@
-package onboarder
+package signup
 
 import (
 	"coralreefci/engine/gateway/conflation"

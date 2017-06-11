@@ -1,4 +1,4 @@
-package onboarder
+package signup
 
 /*
 import (
