@@ -17,7 +17,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/google/go-github/github"
 	"github.com/gorilla/mux"
 	//"coralreefci/engine/onboarder"
 	// "coralreefci/models"
@@ -32,7 +31,7 @@ const (
 
 //var modelList = []*onboarder.ArchModel{}
 
-var webhooksplit float32 = 1
+var webhooksplit float32 = 0.5
 
 type Issue struct {
 	Payload json.RawMessage `json:issue`
@@ -44,12 +43,14 @@ type BacktestServer struct {
 	server http.Server
 	//onboarder.RepoServer
 	events        []*ingestor.Event
-	WebhookEvents []ingestor.Event
+	WebhookEvents []*ingestor.Event
 }
 
 func (b *BacktestServer) routes() *mux.Router {
 	gorilla := mux.NewRouter()
 	gorilla.HandleFunc("/repos/{org}/{repo}/issues", b.getIssues)
+	gorilla.HandleFunc("/repos/{org}/{repo}/pulls", b.getPulls)
+	gorilla.HandleFunc("/stream", b.streamWebhooks)
 	return gorilla
 }
 
@@ -74,7 +75,7 @@ func (b *BacktestServer) LoadArchive(path string) {
 	case mode.IsDir():
 		files, _ := ioutil.ReadDir(path)
 		loadedFiles := 0
-		inserts := 0
+		//inserts := 0
 		totalFiles := len(files)
 		err := filepath.Walk(path, func(path string, f os.FileInfo, err error) error {
 			parseErr := b.parseFile(path)
@@ -84,15 +85,27 @@ func (b *BacktestServer) LoadArchive(path string) {
 			} else {
 				fmt.Println(parseErr)
 			}
-			if inserts%2 == 0 {
+			/*
+				if inserts%2 == 0 {
+					debug.FreeOSMemory()
+					b.DB.FlushBackTestTable()
+				}*/
+
+			if loadedFiles > 1 && loadedFiles%100 == 0 {
 				debug.FreeOSMemory()
+				time.Sleep(1 * time.Minute)
 			}
-			if loadedFiles > 0 && loadedFiles%10 == 0 {
+			if loadedFiles > 0 && loadedFiles%5 == 0 {
+				debug.FreeOSMemory()
+				b.DB.FlushBackTestTable()
 				b.DB.BulkInsertBacktestEvents(b.events)
+				debug.FreeOSMemory()
+
 				for i := 0; i < len(b.events); i++ {
 					RecycleEvent(b.events[i])
-					inserts++
+					//inserts++
 				}
+				time.Sleep(1 * time.Second)
 				b.events = []*ingestor.Event{}
 				fmt.Printf("Inserted %d out of %d files\n", loadedFiles, totalFiles)
 			}
@@ -137,7 +150,7 @@ func (b *BacktestServer) parseFile(filename string) error {
 			return err
 		}
 		switch e.Type {
-		case "IssuesEvent": //,"PullRequestEvent":
+		case "IssuesEvent", "PullRequestEvent":
 			m := e.Payload.(map[string]interface{})
 			e.Action = m["action"].(string) // Workaround
 			b.events = append(b.events, e)
@@ -186,28 +199,98 @@ func (b *BacktestServer) backtestPredict(w http.ResponseWriter, r *http.Request)
 
 }
 
-//TODO Fix
+//TODO Refactor
 func (b *BacktestServer) getIssues(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	org := vars["org"]
 	repo := vars["repo"]
 	queryParams := ingestor.EventQuery{Type: ingestor.Issue, Repo: org + "/" + repo}
 	events, _ := b.DB.ReadBacktestEvents(queryParams)
-	issues := make([]*github.Issue, len(events))
+	issues := make([]interface{}, int(float32(len(events))*webhooksplit))
 	if webhooksplit == 1 {
 		for i := 0; i < len(events); i++ {
-			issues[i] = events[i].Payload.(*github.Issue)
+			m := events[i].Payload.(map[string]interface{})
+			issue := m["issue"]
+			issues[i] = issue
 		}
 	} else {
-		for i := 0; i < int(float32(len(events))/webhooksplit); i++ {
-			issues[i] = events[i].Payload.(*github.Issue)
+		for i := 0; i < int(float32(len(events))*webhooksplit); i++ {
+			m := events[i].Payload.(map[string]interface{})
+			issue := m["issue"]
+			issues[i] = issue
 		}
-		for i := int(float32(len(events)) / webhooksplit); i < len(events); i++ {
-			b.WebhookEvents = append(b.WebhookEvents, events[i])
+		for i := int(float32(len(events)) * webhooksplit); i < len(events); i++ {
+			event := events[i]
+			b.WebhookEvents = append(b.WebhookEvents, &event)
 		}
 	}
 	payload, _ := json.Marshal(&issues)
 	w.Write(payload)
+}
+
+//TODO Refactor
+func (b *BacktestServer) getPulls(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	org := vars["org"]
+	repo := vars["repo"]
+	queryParams := ingestor.EventQuery{Type: ingestor.PullRequest, Repo: org + "/" + repo}
+	events, _ := b.DB.ReadBacktestEvents(queryParams)
+	pulls := make([]interface{}, int(float32(len(events))*webhooksplit))
+	if webhooksplit == 1 {
+		for i := 0; i < len(events); i++ {
+			m := events[i].Payload.(map[string]interface{})
+			pull := m["pull_request"]
+			pulls[i] = pull
+		}
+	} else {
+		for i := 0; i < int(float32(len(events))*webhooksplit); i++ {
+			m := events[i].Payload.(map[string]interface{})
+			pull := m["pull_request"]
+			pulls[i] = pull
+		}
+		for i := int(float32(len(events)) * webhooksplit); i < len(events); i++ {
+			event := events[i]
+			b.WebhookEvents = append(b.WebhookEvents, &event)
+		}
+		fmt.Println("Streaming", len(b.WebhookEvents))
+	}
+	payload, _ := json.Marshal(&pulls)
+	w.Write(payload)
+}
+
+func (b *BacktestServer) streamWebhooks(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Streaming WebHooks", len(b.WebhookEvents))
+
+	for i := 0; i < len(b.WebhookEvents); i++ {
+		m := b.WebhookEvents[i].Payload.(map[string]interface{})
+		m["repository"] = &b.WebhookEvents[i].Repo // Workaround
+		payload, _ := json.Marshal(m)
+		var event string
+		if b.WebhookEvents[i].Type == "PullRequestEvent" {
+			event = "pull_request"
+		} else {
+			event = "issues"
+		}
+		event = event
+		payload = payload
+		bs.HTTPPost(bytes.NewBuffer(payload), event)
+	}
+}
+
+func (b *BacktestServer) StreamWebhookEvents() {
+	fmt.Println("Streaming", len(b.WebhookEvents))
+	for i := 0; i < len(b.WebhookEvents); i++ {
+		m := b.WebhookEvents[i].Payload.(map[string]interface{})
+		m["repository"] = &b.WebhookEvents[i].Repo // Workaround
+		payload, _ := json.Marshal(m)
+		var event string
+		if b.WebhookEvents[i].Type == "PullRequestEvent" {
+			event = "pull_request"
+		} else {
+			event = "issues"
+		}
+		bs.HTTPPost(bytes.NewBuffer(payload), event)
+	}
 }
 
 func (b *BacktestServer) HTTPPost(payload *bytes.Buffer, event string) {

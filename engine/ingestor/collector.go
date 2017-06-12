@@ -27,6 +27,13 @@ func collectorHandler() http.Handler {
 			fmt.Printf("Could not parse webhook %v", err)
 			return
 		}
-		Workload <- *event.(*github.IssuesEvent)
+		switch v := event.(type) {
+		case *github.IssuesEvent:
+			Workload <- *v
+		case *github.PullRequestEvent:
+			Workload <- *v
+		default:
+			fmt.Println("unknown") //TODO: Add error handling
+		}
 	})
 }

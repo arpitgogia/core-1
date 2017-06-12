@@ -49,6 +49,10 @@ func (d *Database) Close() {
 	d.db.Close()
 }
 
+func (d *Database) FlushBackTestTable() {
+	d.db.Exec("optimize table backtest_events flush")
+}
+
 func (d *Database) EnableRepo(repoId int) {
 	var buffer bytes.Buffer
 	archRepoInsert := "INSERT INTO arch_repos(repository_id, enabled) VALUES"
@@ -62,7 +66,6 @@ func (d *Database) EnableRepo(repoId int) {
 
 func (d *Database) BulkInsertBacktestEvents(events []*Event) {
 	buffer := d.BufferPool.Get()
-
 	for i := 0; i < len(events); i++ {
 		buffer.AppendInt(int64(*events[i].Repo.ID))
 		buffer.AppendByte('~')
@@ -107,9 +110,9 @@ func (d *Database) ReadBacktestEvents(params EventQuery) ([]Event, error) {
 	var err error
 	switch t := params.Type; t {
 	case PullRequest:
-		results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_pull=?", params.Repo, 1)
-	case Issue:
 		results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_pull=?", params.Repo, 0)
+	case Issue:
+		results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_pull=?", params.Repo, 1)
 	default:
 		results, err = d.db.Query("select payload from backtest_events where repo_name=?", params.Repo)
 	}

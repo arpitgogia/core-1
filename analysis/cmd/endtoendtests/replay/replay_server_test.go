@@ -1,17 +1,18 @@
 package replay
 
 import (
-	"bytes"
-	//	"coralreefci/engine/gateway"
+	//	"bytes"
 	"coralreefci/engine/ingestor"
-	"encoding/json"
+	//	"encoding/json"
 	"fmt"
-	//	"github.com/google/go-github/github"
+	"github.com/google/go-github/github"
 	//	"github.com/pkg/profile"
-	//	"net/url"
+	"net/http"
+	"net/url"
 	"os"
+	"runtime"
 	"testing"
-	//"runtime"
+	"time"
 )
 
 var bs BacktestServer
@@ -19,7 +20,7 @@ var db ingestor.Database
 var ingestorServer ingestor.IngestorServer
 
 func setup() {
-	//runtime.GOMAXPROCS(runtime.NumCPU())
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	bufferPool := ingestor.NewPool()
 	db = ingestor.Database{BufferPool: bufferPool}
 	db.Open()
@@ -30,6 +31,8 @@ func setup() {
 	dispatcher.Start(5)
 	ingestorServer = ingestor.IngestorServer{}
 	go ingestorServer.Start()
+
+	time.Sleep(5 * time.Second)
 }
 
 func TestMain(m *testing.M) {
@@ -107,10 +110,11 @@ func Test_Replay4(t *testing.T) {
   fmt.Println("#Events Replayed:", len(events))
 }*/
 
+/*
 func Test_Replay5(t *testing.T) {
 	var event string
-	org := "antlr"
-	repo := "antlr4"
+	org := "rust-lang"
+	repo := "rust"
 	queryParams := ingestor.EventQuery{Repo: org + "/" + repo}
 	events, err := db.ReadBacktestEvents(queryParams)
 	fmt.Println(err)
@@ -126,6 +130,28 @@ func Test_Replay5(t *testing.T) {
 		bs.HTTPPost(bytes.NewBuffer(payload), event)
 	}
 	fmt.Println("#Events Replayed:", len(events))
+}*/
+
+func Test_Backtest1(t *testing.T) {
+	httpClient := http.Client{}
+	client := github.NewClient(nil)
+	url, _ := url.Parse(localPath)
+	client.BaseURL = url
+	client.UploadURL = url
+
+	repoInitializer := ingestor.RepoInitializer{}
+	repo := ingestor.AuthenticatedRepo{Repo: &github.Repository{ID: github.Int(724712), Organization: &github.Organization{Name: github.String("rust-lang")}, Name: github.String("rust")}, Client: client}
+	repoInitializer.AddRepo(repo)
+
+	u := "stream"
+	req, err := client.NewRequest("POST", u, nil)
+	httpClient.Do(req)
+	fmt.Println(err)
+
+	time.Sleep(15 * time.Second)
+
+	//fmt.Println(len(bs.WebhookEvents))
+	//bs.StreamWebhookEvents()
 }
 
 /*
