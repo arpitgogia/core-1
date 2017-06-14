@@ -1,4 +1,4 @@
-package retriever
+package backend
 
 import (
 	"encoding/json"

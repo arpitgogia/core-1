@@ -1,4 +1,4 @@
-package assignment
+package backend
 
 import (
 	"github.com/google/go-github/github"

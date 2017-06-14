@@ -48,7 +48,7 @@ type Resources struct {
 
 // TODO: Check to see that all of the specific redirects should in fact be
 //       pointing towards "/" instead of some other URL + handler.
-func (rs *RepoServer) githubCallbackHandler(w http.ResponseWriter, r *http.Request) {
+func (fs  *FrontendServer) githubCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("state") != oaState {
 		http.Redirect(w, r, "/", http.StatusForbidden)
 		return
@@ -92,16 +92,11 @@ func (rs *RepoServer) githubCallbackHandler(w http.ResponseWriter, r *http.Reque
 		}
 		for i := 0; i < len(results.repos); i++ {
 			repo := results.repos[i]
-			if err := rs.NewHook(repo, client); err != nil {
+			if err := fs.NewHook(repo, client); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			rs.NewArchRepo(repo, client)
-			if err := rs.AddModel(repo); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			rs.BoltDatabase.store(*repo.ID, "token", token)
+			fs.Database.store(*repo.ID, "token", token)
 		}
 	}
 	http.Redirect(w, r, "/setup_complete", http.StatusPermanentRedirect)

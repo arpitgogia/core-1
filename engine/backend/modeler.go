@@ -1,4 +1,4 @@
-package signup
+package backend
 
 import (
 	"github.com/google/go-github/github"
@@ -8,7 +8,7 @@ import (
 	"coralreefci/models/bhattacharya"
 )
 
-func (rs *RepoServer) AddModel(repo *github.Repository) error {
+func (bs *BackendServer) AddModel(repo *github.Repository) error {
 	repoID := *repo.ID
 	context := &conflation.Context{}
 	scenarios := []conflation.Scenario{&conflation.Scenario2{}}
@@ -23,12 +23,12 @@ func (rs *RepoServer) AddModel(repo *github.Repository) error {
 		Context:              context,
 	}
 	model := models.Model{Algorithm: &bhattacharya.NBModel{}}
-	if rs.Repos == nil {
-		rs.Repos = make(map[int]*ArchRepo)
+	if bs.Repos == nil {
+		bs.Repos = make(map[int]*ArchRepo)
 	}
-	if _, ok := rs.Repos[repoID]; !ok {
-		rs.Repos[repoID] = &ArchRepo{Hive: &ArchHive{Blender: &Blender{}}}
+	if _, ok := bs.Repos[repoID]; !ok {
+		bs.Repos[repoID] = &ArchRepo{Hive: &ArchHive{Blender: &Blender{}}}
 	}
-	rs.Repos[repoID].Hive.Blender.Models = append(rs.Repos[repoID].Hive.Blender.Models, &ArchModel{Model: &model, Conflator: &conflator})
+	bs.Repos[repoID].Hive.Blender.Models = append(bs.Repos[repoID].Hive.Blender.Models, &ArchModel{Model: &model, Conflator: &conflator})
 	return nil
 }

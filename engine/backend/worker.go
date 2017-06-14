@@ -1,27 +1,19 @@
-package dispatcher
-
-import (
-	// "coralreefci/engine/gateway/conflation"
-	"coralreefci/engine/onboarder"
-	"coralreefci/engine/onboarder/retriever"
-	// "coralreefci/models"
-	// "coralreefci/models/bhattacharya"
-)
+package backend
 
 type Worker struct {
 	ID    int
-	Work  chan *retriever.RepoData
-	Queue chan chan *retriever.RepoData
-	Repos map[int]*onboarder.ArchRepo
+	Work  chan *RepoData
+	Queue chan chan *RepoData
+	Repos map[int]*ArchRepo
 	Quit  chan bool
 }
 
-func NewWorker(id int, queue chan chan *retriever.RepoData) Worker {
+func NewWorker(id int, queue chan chan *RepoData) Worker {
 	return Worker{
 		ID:    id,
-		Work:  make(chan *retriever.RepoData),
+		Work:  make(chan *RepoData),
 		Queue: queue,
-		Repos: make(map[int]*onboarder.ArchRepo),
+		Repos: make(map[int]*ArchRepo),
 		Quit:  make(chan bool),
 	}
 }
@@ -42,7 +34,8 @@ func (w *Worker) Start() {
 					w.Repos[repodata.RepoID].Hive.Blender.Models[0].Conflator.SetPullRequests(repodata.Pulls)
 				}
 				w.Repos[repodata.RepoID].Hive.Blender.Models[0].Conflator.Conflate()
-				// TODO: Implement learn method calls.
+				// TODO: Call Learn/Predict.
+                // TODO: Add in Assignment call.
 			case <-w.Quit:
 				return
 			}

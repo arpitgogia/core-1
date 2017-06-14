@@ -1,4 +1,4 @@
-package signup
+package backend
 
 import (
 	"coralreefci/engine/gateway/conflation"
@@ -15,7 +15,7 @@ type ArchModel struct {
 	// PilotScenarios   []conflation.Scenario
 	// LearnedScenarios []conflation.Scenario
 	// StrategyParams   StrategyParams TODO: Baseline with self evolving
-	//                                       parameters (Tossing Graph?,
+	//                                       parameters: Tossing Graph?,
 	//                                       Conflation Scenarios, etc.)
 }
 
@@ -37,12 +37,12 @@ type ArchRepo struct {
 	Client *github.Client
 }
 
-func (rs *RepoServer) NewArchRepo(repo *github.Repository, client *github.Client) {
-	rs.Repos[*repo.ID] = &ArchRepo{
-		Repo:   repo,
-		Client: client,
-	}
-}
+// func (bs *RepoServer) NewArchRepo(repo *github.Repository, client *github.Client) {
+// 	bs.Repos[*repo.ID] = &ArchRepo{
+// 		Repo:   repo,
+// 		Client: client,
+// 	}
+// }
 
 // TODO: Instantiate the Conflator struct on the ArchRepo.
 

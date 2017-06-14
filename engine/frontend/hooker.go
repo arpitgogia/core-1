@@ -8,8 +8,8 @@ import (
 
 const secretKey = "figrin-dan-and-the-modal-nodes"
 
-func (rs *RepoServer) NewHook(repo *github.Repository, client *github.Client) error {
-	if check, err := rs.hookExists(repo, client); check {
+func (fs  *FrontendServer) NewHook(repo *github.Repository, client *github.Client) error {
+	if check, err := fs.hookExists(repo, client); check {
 		return err
 	}
 	name := *repo.Name
@@ -30,19 +30,19 @@ func (rs *RepoServer) NewHook(repo *github.Repository, client *github.Client) er
 	if err != nil {
 		return err
 	}
-	if err = rs.BoltDatabase.store(*repo.ID, "hookID", *hook.ID); err != nil {
+	if err = fs.Database.store(*repo.ID, "hookID", *hook.ID); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (rs *RepoServer) hookExists(repo *github.Repository, client *github.Client) (bool, error) {
+func (fs  *FrontendServer) hookExists(repo *github.Repository, client *github.Client) (bool, error) {
 	name, owner := "", ""
 	if repo.Name != nil && repo.Owner.Login != nil {
 		name = *repo.Name
 		owner = *repo.Owner.Login
 	}
-	hookID, err := rs.BoltDatabase.retrieve(*repo.ID, "hookID")
+	hookID, err := fs.Database.retrieve(*repo.ID, "hookID")
 	if err != nil {
 		return false, err
 	}
