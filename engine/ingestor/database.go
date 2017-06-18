@@ -2,11 +2,12 @@ package ingestor
 
 import (
 	"bytes"
+	"coralreefci/utils"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"github.com/go-sql-driver/mysql"
 	"github.com/google/go-github/github"
+	"go.uber.org/zap"
 	"io"
 )
 
@@ -60,8 +61,13 @@ func (d *Database) EnableRepo(repoId int) {
 
 	buffer.WriteString(archRepoInsert)
 	buffer.WriteString(valuesFmt)
-	_, err := d.db.Exec(buffer.String(), repoId, true)
-	fmt.Println(err)
+	result, err := d.db.Exec(buffer.String(), repoId, true)
+	if err != nil {
+		utils.AppLog.Error("Database Insert Failure", zap.Error(err))
+	} else {
+		rows, _ := result.RowsAffected()
+		utils.AppLog.Info("Database Insert Success", zap.Int64("Rows", rows))
+	}
 }
 
 func (d *Database) BulkInsertBacktestEvents(events []*Event) {
@@ -96,9 +102,12 @@ func (d *Database) BulkInsertBacktestEvents(events []*Event) {
 		return sqlBuffer
 	})
 	defer mysql.DeregisterReaderHandler("data")
-	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE backtest_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,repo_name,is_closed,is_pull,payload)")
+	result, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE backtest_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,repo_name,is_closed,is_pull,payload)")
 	if err != nil {
-		fmt.Println(err)
+		utils.AppLog.Error("Database Insert Failure", zap.Error(err))
+	} else {
+		rows, _ := result.RowsAffected()
+		utils.AppLog.Info("Database Insert Success", zap.Int64("Rows", rows))
 	}
 	sqlBuffer.Reset()
 }
@@ -189,9 +198,12 @@ func (d *Database) InsertIssue(issue github.Issue) {
 	} else {
 		values[4] = true
 	}
-	_, err := d.db.Exec(buffer.String(), values...)
+	result, err := d.db.Exec(buffer.String(), values...)
 	if err != nil {
-		fmt.Println(err)
+		utils.AppLog.Error("Database Insert Failure", zap.Error(err))
+	} else {
+		rows, _ := result.RowsAffected()
+		utils.AppLog.Debug("Database Insert Success", zap.Int64("Rows", rows))
 	}
 }
 
@@ -226,9 +238,12 @@ func (d *Database) BulkInsertIssues(issues []*github.Issue) {
 		return sqlBuffer
 	})
 	defer mysql.DeregisterReaderHandler("data")
-	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE github_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,issues_id,number,payload,is_pull,is_closed)")
+	result, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE github_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,issues_id,number,payload,is_pull,is_closed)")
 	if err != nil {
-		fmt.Println(err)
+		utils.AppLog.Error("Database Insert Failure", zap.Error(err))
+	} else {
+		rows, _ := result.RowsAffected()
+		utils.AppLog.Info("Database Insert Success", zap.Int64("Rows", rows))
 	}
 }
 
@@ -248,9 +263,12 @@ func (d *Database) InsertPullRequest(pull github.PullRequest) {
 	} else {
 		values[1] = true
 	}
-	_, err := d.db.Exec(buffer.String(), values...)
+	result, err := d.db.Exec(buffer.String(), values...)
 	if err != nil {
-		fmt.Println(err)
+		utils.AppLog.Error("Database Insert Failure", zap.Error(err))
+	} else {
+		rows, _ := result.RowsAffected()
+		utils.AppLog.Debug("Database Insert Success", zap.Int64("Rows", rows))
 	}
 }
 
@@ -285,9 +303,12 @@ func (d *Database) BulkInsertPullRequests(pulls []*github.PullRequest) {
 		return sqlBuffer
 	})
 	defer mysql.DeregisterReaderHandler("data")
-	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE github_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,issues_id,number,payload,is_pull,is_closed)")
+	result, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE github_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,issues_id,number,payload,is_pull,is_closed)")
 	if err != nil {
-		fmt.Println(err)
+		utils.AppLog.Error("Database Insert Failure", zap.Error(err))
+	} else {
+		rows, _ := result.RowsAffected()
+		utils.AppLog.Info("Database Insert Success", zap.Int64("Rows", rows))
 	}
 }
 

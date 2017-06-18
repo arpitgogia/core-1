@@ -1,10 +1,10 @@
 package ingestor
 
 import (
-	"fmt"
-	"net/http"
-
+	"coralreefci/utils"
 	"github.com/google/go-github/github"
+	"go.uber.org/zap"
+	"net/http"
 )
 
 var secretKey = "test"
@@ -14,7 +14,7 @@ func collectorHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		eventType := r.Header.Get("X-Github-Event")
 		if eventType != "issues" && eventType != "pull_request" {
-			fmt.Printf("Ignoring '%v' event", eventType)
+			utils.AppLog.Warn("Ignoring event", zap.String("EventType", eventType))
 			return
 		}
 		payload, err := github.ValidatePayload(r, []byte(secretKey))
@@ -24,7 +24,7 @@ func collectorHandler() http.Handler {
 		}
 		event, err := github.ParseWebHook(github.WebHookType(r), payload)
 		if err != nil {
-			fmt.Printf("Could not parse webhook %v", err)
+			utils.AppLog.Error("Could not parse webhook", zap.Error(err))
 			return
 		}
 		switch v := event.(type) {
@@ -33,7 +33,7 @@ func collectorHandler() http.Handler {
 		case *github.PullRequestEvent:
 			Workload <- *v
 		default:
-			fmt.Println("unknown") //TODO: Add error handling
+			utils.AppLog.Error("Unknown", zap.ByteString("GithubEvent", payload))
 		}
 	})
 }
