@@ -89,13 +89,24 @@ func (m *Model) FoldImplementation(test []conflation.ExpandedIssue) (float64, ma
 			length = len(predictions)
 		}
 		for j := 0; j < length; j++ {
-			if predictions[j] == *test[i].Issue.Assignees[0].Login {
-				predicted = append(predicted, predictions[j])
-				correct++
-				break
+			if test[i].Issue.Assignees != nil {
+				if predictions[j] == *test[i].Issue.Assignees[0].Login {
+					predicted = append(predicted, predictions[j])
+					correct++
+					break
+				} else {
+					predicted = append(predicted, predictions[0])
+					break
+				}
 			} else {
-				predicted = append(predicted, predictions[0])
-				break
+				if predictions[j] == *test[i].PullRequest.User.Login {
+					predicted = append(predicted, predictions[j])
+					correct++
+					break
+				} else {
+					predicted = append(predicted, predictions[0])
+					break
+				}
 			}
 		}
 	}

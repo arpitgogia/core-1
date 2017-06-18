@@ -52,23 +52,9 @@ func (t *BackTestRunner) Run() {
 	normalizer := conf.Normalizer{Context: context}
 	conflator := conf.Conflator{Scenarios: scenarios, ConflationAlgorithms: conflationAlgorithms, Normalizer: normalizer, Context: context}
 
-	issuesCopy := make([]github.Issue, len(githubIssues))
-	pullsCopy := make([]github.PullRequest, len(githubPulls))
-
-	// TODO: Evaluate this particular snippet of code as it has potential
-	//       performance optimization capabilities related to the hardware
-	//       level. This may ultimately live in the actual gateway.go file to
-	//	     improve the actual download operations.
-	for i := 0; i < len(issuesCopy); i++ {
-		issuesCopy[i] = *githubIssues[i]
-	}
-	for i := 0; i < len(pullsCopy); i++ {
-		pullsCopy[i] = *githubPulls[i]
-	}
-
 	conflator.Context.Issues = []conf.ExpandedIssue{}
-	conflator.SetIssueRequests(issuesCopy)
-	conflator.SetPullRequests(pullsCopy)
+	conflator.SetIssueRequests(githubIssues)
+	conflator.SetPullRequests(githubPulls)
 	conflator.Conflate()
 
 	trainingSet := []conf.ExpandedIssue{}
@@ -76,7 +62,7 @@ func (t *BackTestRunner) Run() {
 	for i := 0; i < len(conflator.Context.Issues); i++ {
 		expandedIssue := conflator.Context.Issues[i]
 		if expandedIssue.Conflate {
-			if expandedIssue.Issue.Assignee == nil {
+			if expandedIssue.Issue.Assignee == nil && expandedIssue.PullRequest.User == nil {
 				continue
 			} else {
 				trainingSet = append(trainingSet, conflator.Context.Issues[i])
@@ -88,19 +74,27 @@ func (t *BackTestRunner) Run() {
 	processedTrainingSet := []conf.ExpandedIssue{}
 
 	excludeAssignees := From(trainingSet).Where(func(exclude interface{}) bool {
-		assignee := *exclude.(conf.ExpandedIssue).Issue.Assignee.Login
-		return assignee != "dotnet-bot" && assignee != "dotnet-mc-bot" && assignee != "00101010b" && assignee != "stephentoub"
+		if exclude.(conf.ExpandedIssue).Issue.Assignee != nil {
+			assignee := *exclude.(conf.ExpandedIssue).Issue.Assignee.Login
+			return assignee != "dotnet-bot" && assignee != "dotnet-mc-bot" && assignee != "00101010b" && assignee != "stephentoub"
+		} else {
+			return true
+		}
 	})
 
 	groupby := excludeAssignees.GroupBy(
 		func(r interface{}) interface{} {
-			return *r.(conf.ExpandedIssue).Issue.Assignee.ID
+			if r.(conf.ExpandedIssue).Issue.Assignee != nil {
+				return *r.(conf.ExpandedIssue).Issue.Assignee.ID
+			} else {
+				return *r.(conf.ExpandedIssue).PullRequest.User.ID
+			}
 		}, func(r interface{}) interface{} {
 			return r.(conf.ExpandedIssue)
 		})
 
 	where := groupby.Where(func(groupby interface{}) bool {
-		return len(groupby.(Group).Group) >= 30
+		return len(groupby.(Group).Group) >= 28
 	})
 
 	orderby := where.OrderByDescending(func(where interface{}) interface{} {
@@ -112,7 +106,11 @@ func (t *BackTestRunner) Run() {
 	orderby.SelectMany(func(orderby interface{}) Query {
 		return From(orderby.(Group).Group).OrderBy(
 			func(where interface{}) interface{} {
-				return *where.(conf.ExpandedIssue).Issue.ID
+				if where.(conf.ExpandedIssue).Issue.ID != nil {
+					return *where.(conf.ExpandedIssue).Issue.ID
+				} else {
+					return *where.(conf.ExpandedIssue).PullRequest.ID
+				}
 			}).Query
 	}).ToSlice(&processedTrainingSet)
 

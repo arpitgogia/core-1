@@ -140,6 +140,36 @@ func (d *Database) ReadBacktestEvents(params EventQuery) ([]Event, error) {
 	return events, nil
 }
 
+func (d *Database) ReadPullRequestTest() ([]github.PullRequest, error) {
+	events := []github.PullRequest{}
+	var payload []byte
+	var results *sql.Rows
+	var err error
+	results, err = d.db.Query("select payload from github_events where is_pull=1")
+	if err != nil {
+		return nil, err
+	}
+	defer results.Close()
+	for results.Next() {
+		var event github.PullRequest
+		err := results.Scan(&payload)
+		if err != nil {
+			return nil, err
+		}
+		decoder := json.NewDecoder(bytes.NewReader(payload))
+		decoder.UseNumber()
+		if err := decoder.Decode(&event); err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	err = results.Err()
+	if err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
 func (d *Database) InsertIssue(issue github.Issue) {
 	var buffer bytes.Buffer
 	eventsInsert := "INSERT INTO github_events(repo_id,issues_id,number,payload,is_pull,is_closed) VALUES"
@@ -219,7 +249,9 @@ func (d *Database) InsertPullRequest(pull github.PullRequest) {
 		values[1] = true
 	}
 	_, err := d.db.Exec(buffer.String(), values...)
-	fmt.Println(err)
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func (d *Database) BulkInsertPullRequests(pulls []*github.PullRequest) {

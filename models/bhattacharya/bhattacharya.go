@@ -84,8 +84,8 @@ func (c *NBModel) Predict(input conflation.ExpandedIssue) []string {
 		names = append(names, string(c.assignees[results[i].id]))
 	}
 
-	utils.ModelLog.Debug("", zap.String("URL", *input.Issue.URL))
-	utils.ModelLog.Debug("Predicted:")
+	//utils.ModelLog.Debug("", zap.String("URL", *input.Issue.URL))
+	//utils.ModelLog.Debug("Predicted:")
 	//TODO: Fix logging
 	/*
 		for i := 0; i < len(names); i++ {
