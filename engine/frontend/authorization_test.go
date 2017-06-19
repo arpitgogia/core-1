@@ -1,4 +1,4 @@
-package signup
+package frontend
 
 import (
 	"net/http"
@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+/*
 func Test_mainHandler(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req, err := http.NewRequest("GET", "/handler-test", nil)
@@ -18,7 +19,7 @@ func Test_mainHandler(t *testing.T) {
 		t.Errorf("Handler returning incorrect status code; returning %v", status)
 	}
 }
-
+*/
 func Test_githubLoginHandler(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req, err := http.NewRequest("GET", "/handler-test", nil)

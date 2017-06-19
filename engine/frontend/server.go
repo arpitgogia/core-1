@@ -1,4 +1,4 @@
-package signup
+package frontend
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ type FrontendServer struct {
 	Database BoltDB
 }
 
-func (fs  *FrontendServer) routes() *http.ServeMux {
+func (fs *FrontendServer) routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/", mainHandler)
 	mux.HandleFunc("/login", githubLoginHandler)
@@ -21,7 +21,7 @@ func (fs  *FrontendServer) routes() *http.ServeMux {
 	return mux
 }
 
-func (fs  *FrontendServer) Start() {
+func (fs *FrontendServer) Start() {
 	fs.Server = http.Server{Addr: "127.0.0.1:8080", Handler: fs.routes()}
 	// TODO: Add in logging and remove print statement.
 	err := fs.Server.ListenAndServe()
@@ -30,19 +30,19 @@ func (fs  *FrontendServer) Start() {
 	}
 }
 
-func (fs  *FrontendServer) Stop() {
+func (fs *FrontendServer) Stop() {
 	// TODO: Closing the server down is a needed operation that will be added.
 }
 
-func (fs  *FrontendServer) OpenBolt() error {
+func (fs *FrontendServer) OpenBolt() error {
 	boltDB, err := bolt.Open("storage.db", 0644, nil)
 	if err != nil {
 		return err
 	}
-	fs.Database = BoltDB{db: boltDB}
+	fs.Database = BoltDB{DB: boltDB}
 	return nil
 }
 
-func (fs  *FrontendServer) CloseBolt() {
-	fs.Database.db.Close()
+func (fs *FrontendServer) CloseBolt() {
+	fs.Database.DB.Close()
 }

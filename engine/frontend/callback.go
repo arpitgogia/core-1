@@ -1,10 +1,12 @@
-package signup
+package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 
 	"github.com/google/go-github/github"
 	"github.com/gorilla/schema"
@@ -40,6 +42,8 @@ const setup = `
 </html>
 `
 
+const BackendSecret = "fear-is-my-ally"
+
 var decoder = schema.NewDecoder()
 
 type Resources struct {
@@ -48,7 +52,7 @@ type Resources struct {
 
 // TODO: Check to see that all of the specific redirects should in fact be
 //       pointing towards "/" instead of some other URL + handler.
-func (fs  *FrontendServer) githubCallbackHandler(w http.ResponseWriter, r *http.Request) {
+func (fs *FrontendServer) githubCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("state") != oaState {
 		http.Redirect(w, r, "/", http.StatusForbidden)
 		return
@@ -96,7 +100,22 @@ func (fs  *FrontendServer) githubCallbackHandler(w http.ResponseWriter, r *http.
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			fs.Database.store(*repo.ID, "token", token)
+			tokenByte, err := json.Marshal(token)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if err := fs.Database.Store("token", *repo.ID, tokenByte); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			// TODO: Build logic to send all repo IDs simultaneously via the POST request.
+			resp, err := http.PostForm("/activate-repos", url.Values{"state": {BackendSecret}, "repos": {string(*repo.ID)}})
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			defer resp.Body.Close()
 		}
 	}
 	http.Redirect(w, r, "/setup_complete", http.StatusPermanentRedirect)

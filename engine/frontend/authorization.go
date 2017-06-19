@@ -1,4 +1,4 @@
-package signup
+package frontend
 
 import (
 	"net/http"

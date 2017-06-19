@@ -1,14 +1,15 @@
-package signup
+package frontend
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/google/go-github/github"
 )
 
 const secretKey = "figrin-dan-and-the-modal-nodes"
 
-func (fs  *FrontendServer) NewHook(repo *github.Repository, client *github.Client) error {
+func (fs *FrontendServer) NewHook(repo *github.Repository, client *github.Client) error {
 	if check, err := fs.hookExists(repo, client); check {
 		return err
 	}
@@ -30,24 +31,28 @@ func (fs  *FrontendServer) NewHook(repo *github.Repository, client *github.Clien
 	if err != nil {
 		return err
 	}
-	if err = fs.Database.store(*repo.ID, "hookID", *hook.ID); err != nil {
+	if err = fs.Database.Store("hook", *repo.ID, []byte(strconv.Itoa(*hook.ID))); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (fs  *FrontendServer) hookExists(repo *github.Repository, client *github.Client) (bool, error) {
+func (fs *FrontendServer) hookExists(repo *github.Repository, client *github.Client) (bool, error) {
 	name, owner := "", ""
 	if repo.Name != nil && repo.Owner.Login != nil {
 		name = *repo.Name
 		owner = *repo.Owner.Login
 	}
-	hookID, err := fs.Database.retrieve(*repo.ID, "hookID")
+	hook, err := fs.Database.Retrieve("hook", *repo.ID)
 	if err != nil {
 		return false, err
 	}
 
-	_, _, err = client.Repositories.GetHook(context.Background(), owner, name, hookID.(int))
+	hookID, err := strconv.Atoi(string(hook))
+	if err != nil {
+		return false, err
+	}
+	_, _, err = client.Repositories.GetHook(context.Background(), owner, name, hookID)
 	if err != nil {
 		return false, err
 	}
