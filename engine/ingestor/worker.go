@@ -1,8 +1,9 @@
 package ingestor
 
 import (
-	"fmt"
+	"coralreefci/utils"
 	"github.com/google/go-github/github"
+	"go.uber.org/zap"
 )
 
 type Worker struct {
@@ -39,7 +40,7 @@ func (w *Worker) Start() {
 					//v.PullRequest.Base.Repo = v.Repo //TODO: Confirm
 					w.Db.InsertPullRequest(*v.PullRequest)
 				default:
-					fmt.Println("unknown") //TODO: Add error handling
+					utils.AppLog.Error("Unknown", zap.Any("GithubEvent", v))
 				}
 			case <-w.Quit:
 				return

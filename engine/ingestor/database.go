@@ -2,11 +2,12 @@ package ingestor
 
 import (
 	"bytes"
+	"coralreefci/utils"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"github.com/go-sql-driver/mysql"
 	"github.com/google/go-github/github"
+	"go.uber.org/zap"
 	"io"
 )
 
@@ -49,6 +50,10 @@ func (d *Database) Close() {
 	d.db.Close()
 }
 
+func (d *Database) FlushBackTestTable() {
+	d.db.Exec("optimize table backtest_events flush")
+}
+
 func (d *Database) EnableRepo(repoId int) {
 	var buffer bytes.Buffer
 	archRepoInsert := "INSERT INTO arch_repos(repository_id, enabled) VALUES"
@@ -56,13 +61,17 @@ func (d *Database) EnableRepo(repoId int) {
 
 	buffer.WriteString(archRepoInsert)
 	buffer.WriteString(valuesFmt)
-	_, err := d.db.Exec(buffer.String(), repoId, true)
-	fmt.Println(err)
+	result, err := d.db.Exec(buffer.String(), repoId, true)
+	if err != nil {
+		utils.AppLog.Error("Database Insert Failure", zap.Error(err))
+	} else {
+		rows, _ := result.RowsAffected()
+		utils.AppLog.Info("Database Insert Success", zap.Int64("Rows", rows))
+	}
 }
 
 func (d *Database) BulkInsertBacktestEvents(events []*Event) {
 	buffer := d.BufferPool.Get()
-
 	for i := 0; i < len(events); i++ {
 		buffer.AppendInt(int64(*events[i].Repo.ID))
 		buffer.AppendByte('~')
@@ -93,9 +102,12 @@ func (d *Database) BulkInsertBacktestEvents(events []*Event) {
 		return sqlBuffer
 	})
 	defer mysql.DeregisterReaderHandler("data")
-	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE backtest_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,repo_name,is_closed,is_pull,payload)")
+	result, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE backtest_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,repo_name,is_closed,is_pull,payload)")
 	if err != nil {
-		fmt.Println(err)
+		utils.AppLog.Error("Database Insert Failure", zap.Error(err))
+	} else {
+		rows, _ := result.RowsAffected()
+		utils.AppLog.Info("Database Insert Success", zap.Int64("Rows", rows))
 	}
 	sqlBuffer.Reset()
 }
@@ -107,9 +119,9 @@ func (d *Database) ReadBacktestEvents(params EventQuery) ([]Event, error) {
 	var err error
 	switch t := params.Type; t {
 	case PullRequest:
-		results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_pull=?", params.Repo, 1)
-	case Issue:
 		results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_pull=?", params.Repo, 0)
+	case Issue:
+		results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_pull=?", params.Repo, 1)
 	default:
 		results, err = d.db.Query("select payload from backtest_events where repo_name=?", params.Repo)
 	}
@@ -119,6 +131,36 @@ func (d *Database) ReadBacktestEvents(params EventQuery) ([]Event, error) {
 	defer results.Close()
 	for results.Next() {
 		var event Event
+		err := results.Scan(&payload)
+		if err != nil {
+			return nil, err
+		}
+		decoder := json.NewDecoder(bytes.NewReader(payload))
+		decoder.UseNumber()
+		if err := decoder.Decode(&event); err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	err = results.Err()
+	if err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+func (d *Database) ReadPullRequestTest() ([]github.PullRequest, error) {
+	events := []github.PullRequest{}
+	var payload []byte
+	var results *sql.Rows
+	var err error
+	results, err = d.db.Query("select payload from github_events where is_pull=1")
+	if err != nil {
+		return nil, err
+	}
+	defer results.Close()
+	for results.Next() {
+		var event github.PullRequest
 		err := results.Scan(&payload)
 		if err != nil {
 			return nil, err
@@ -156,9 +198,12 @@ func (d *Database) InsertIssue(issue github.Issue) {
 	} else {
 		values[4] = true
 	}
-	_, err := d.db.Exec(buffer.String(), values...)
+	result, err := d.db.Exec(buffer.String(), values...)
 	if err != nil {
-		fmt.Println(err)
+		utils.AppLog.Error("Database Insert Failure", zap.Error(err))
+	} else {
+		rows, _ := result.RowsAffected()
+		utils.AppLog.Debug("Database Insert Success", zap.Int64("Rows", rows))
 	}
 }
 
@@ -193,9 +238,12 @@ func (d *Database) BulkInsertIssues(issues []*github.Issue) {
 		return sqlBuffer
 	})
 	defer mysql.DeregisterReaderHandler("data")
-	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE github_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,issues_id,number,payload,is_pull,is_closed)")
+	result, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE github_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,issues_id,number,payload,is_pull,is_closed)")
 	if err != nil {
-		fmt.Println(err)
+		utils.AppLog.Error("Database Insert Failure", zap.Error(err))
+	} else {
+		rows, _ := result.RowsAffected()
+		utils.AppLog.Info("Database Insert Success", zap.Int64("Rows", rows))
 	}
 }
 
@@ -215,8 +263,13 @@ func (d *Database) InsertPullRequest(pull github.PullRequest) {
 	} else {
 		values[1] = true
 	}
-	_, err := d.db.Exec(buffer.String(), values...)
-	fmt.Println(err)
+	result, err := d.db.Exec(buffer.String(), values...)
+	if err != nil {
+		utils.AppLog.Error("Database Insert Failure", zap.Error(err))
+	} else {
+		rows, _ := result.RowsAffected()
+		utils.AppLog.Debug("Database Insert Success", zap.Int64("Rows", rows))
+	}
 }
 
 func (d *Database) BulkInsertPullRequests(pulls []*github.PullRequest) {
@@ -250,9 +303,12 @@ func (d *Database) BulkInsertPullRequests(pulls []*github.PullRequest) {
 		return sqlBuffer
 	})
 	defer mysql.DeregisterReaderHandler("data")
-	_, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE github_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,issues_id,number,payload,is_pull,is_closed)")
+	result, err := d.db.Exec("LOAD DATA LOCAL INFILE 'Reader::data' INTO TABLE github_events FIELDS TERMINATED BY '~' LINES TERMINATED BY '\n' (repo_id,issues_id,number,payload,is_pull,is_closed)")
 	if err != nil {
-		fmt.Println(err)
+		utils.AppLog.Error("Database Insert Failure", zap.Error(err))
+	} else {
+		rows, _ := result.RowsAffected()
+		utils.AppLog.Info("Database Insert Success", zap.Int64("Rows", rows))
 	}
 }
 

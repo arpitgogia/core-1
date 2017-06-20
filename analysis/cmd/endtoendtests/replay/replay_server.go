@@ -12,15 +12,15 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	//"net/url"
+	"net/url"
 	// "reflect"
 	"os"
 	"path/filepath"
 
-	"github.com/google/go-github/github"
 	"github.com/gorilla/mux"
 	//"coralreefci/engine/onboarder"
 	// "coralreefci/models"
+	"github.com/google/go-github/github"
 	"runtime/debug"
 	"time"
 )
@@ -30,35 +30,33 @@ const (
 	localPath = "http://localhost:8000/"
 )
 
-//var modelList = []*onboarder.ArchModel{}
-
-var webhooksplit float32 = 1
-
-type Issue struct {
-	Payload json.RawMessage `json:issue`
-}
+var webhooksplit float32 = 0.5
 
 type BacktestServer struct {
-	client http.Client
-	DB     *ingestor.Database
-	server http.Server
+	client    http.Client
+	gitClient *github.Client
+	DB        *ingestor.Database
+	server    http.Server
 	//onboarder.RepoServer
-	events        []*ingestor.Event
-	WebhookEvents []ingestor.Event
+	repoInitializer ingestor.RepoInitializer
+	events          []*ingestor.Event
+	WebhookEvents   []*ingestor.Event
+	eventsCount     int
 }
 
 func (b *BacktestServer) routes() *mux.Router {
 	gorilla := mux.NewRouter()
 	gorilla.HandleFunc("/repos/{org}/{repo}/issues", b.getIssues)
+	gorilla.HandleFunc("/repos/{org}/{repo}/pulls", b.getPulls)
+	gorilla.HandleFunc("/stream", b.streamWebhooks)
 	return gorilla
 }
 
 func (b *BacktestServer) Start() {
-	b.server = http.Server{Addr: "127.0.0.1:8000", Handler: b.routes()}
-	err := b.server.ListenAndServe()
-	if err != nil {
-		fmt.Println("BacktestServer", err)
-	}
+	b.gitClient = github.NewClient(nil)
+	url, _ := url.Parse(localPath)
+	b.gitClient.BaseURL = url
+	b.gitClient.UploadURL = url
 
 	tr := &http.Transport{
 		MaxIdleConns:       10,
@@ -66,6 +64,21 @@ func (b *BacktestServer) Start() {
 		DisableCompression: true,
 	}
 	b.client = http.Client{Transport: tr}
+
+	b.server = http.Server{Addr: "127.0.0.1:8000", Handler: b.routes()}
+	err := b.server.ListenAndServe()
+	if err != nil {
+		fmt.Println("BacktestServer", err)
+	}
+}
+
+func (b *BacktestServer) AddRepo(id int, org string, name string) {
+	client := github.NewClient(nil)
+	url, _ := url.Parse(localPath)
+	client.BaseURL = url
+	client.UploadURL = url
+	repo := ingestor.AuthenticatedRepo{Repo: &github.Repository{ID: github.Int(id), Organization: &github.Organization{Name: github.String(org)}, Name: github.String(name)}, Client: client}
+	b.repoInitializer.AddRepo(repo)
 }
 
 func (b *BacktestServer) LoadArchive(path string) {
@@ -74,7 +87,6 @@ func (b *BacktestServer) LoadArchive(path string) {
 	case mode.IsDir():
 		files, _ := ioutil.ReadDir(path)
 		loadedFiles := 0
-		inserts := 0
 		totalFiles := len(files)
 		err := filepath.Walk(path, func(path string, f os.FileInfo, err error) error {
 			parseErr := b.parseFile(path)
@@ -84,15 +96,24 @@ func (b *BacktestServer) LoadArchive(path string) {
 			} else {
 				fmt.Println(parseErr)
 			}
-			if inserts%2 == 0 {
+
+			if loadedFiles < 31 {
 				debug.FreeOSMemory()
-			}
-			if loadedFiles > 0 && loadedFiles%10 == 0 {
-				b.DB.BulkInsertBacktestEvents(b.events)
 				for i := 0; i < len(b.events); i++ {
 					RecycleEvent(b.events[i])
-					inserts++
 				}
+				b.events = []*ingestor.Event{}
+			}
+			if loadedFiles >= 31 && loadedFiles%5 == 0 {
+				debug.FreeOSMemory()
+				b.DB.FlushBackTestTable()
+				b.DB.BulkInsertBacktestEvents(b.events)
+				debug.FreeOSMemory()
+
+				for i := 0; i < len(b.events); i++ {
+					RecycleEvent(b.events[i])
+				}
+				time.Sleep(5 * time.Second)
 				b.events = []*ingestor.Event{}
 				fmt.Printf("Inserted %d out of %d files\n", loadedFiles, totalFiles)
 			}
@@ -137,10 +158,11 @@ func (b *BacktestServer) parseFile(filename string) error {
 			return err
 		}
 		switch e.Type {
-		case "IssuesEvent": //,"PullRequestEvent":
+		case "IssuesEvent", "PullRequestEvent":
 			m := e.Payload.(map[string]interface{})
 			e.Action = m["action"].(string) // Workaround
 			b.events = append(b.events, e)
+			b.eventsCount++
 		default:
 			RecycleEvent(e)
 		}
@@ -186,28 +208,88 @@ func (b *BacktestServer) backtestPredict(w http.ResponseWriter, r *http.Request)
 
 }
 
-//TODO Fix
+//TODO Refactor
 func (b *BacktestServer) getIssues(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	org := vars["org"]
 	repo := vars["repo"]
 	queryParams := ingestor.EventQuery{Type: ingestor.Issue, Repo: org + "/" + repo}
 	events, _ := b.DB.ReadBacktestEvents(queryParams)
-	issues := make([]*github.Issue, len(events))
+	issues := make([]interface{}, int(float32(len(events))*webhooksplit))
 	if webhooksplit == 1 {
 		for i := 0; i < len(events); i++ {
-			issues[i] = events[i].Payload.(*github.Issue)
+			m := events[i].Payload.(map[string]interface{})
+			issue := m["issue"]
+			issues[i] = issue
 		}
 	} else {
-		for i := 0; i < int(float32(len(events))/webhooksplit); i++ {
-			issues[i] = events[i].Payload.(*github.Issue)
+		for i := 0; i < int(float32(len(events))*webhooksplit); i++ {
+			m := events[i].Payload.(map[string]interface{})
+			issue := m["issue"]
+			issues[i] = issue
 		}
-		for i := int(float32(len(events)) / webhooksplit); i < len(events); i++ {
-			b.WebhookEvents = append(b.WebhookEvents, events[i])
+		for i := int(float32(len(events)) * webhooksplit); i < len(events); i++ {
+			event := events[i]
+			b.WebhookEvents = append(b.WebhookEvents, &event)
 		}
 	}
 	payload, _ := json.Marshal(&issues)
 	w.Write(payload)
+}
+
+//TODO Refactor
+func (b *BacktestServer) getPulls(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	org := vars["org"]
+	repo := vars["repo"]
+	queryParams := ingestor.EventQuery{Type: ingestor.PullRequest, Repo: org + "/" + repo}
+	events, _ := b.DB.ReadBacktestEvents(queryParams)
+	pulls := make([]interface{}, int(float32(len(events))*webhooksplit))
+	if webhooksplit == 1 {
+		for i := 0; i < len(events); i++ {
+			m := events[i].Payload.(map[string]interface{})
+			pull := m["pull_request"]
+			pulls[i] = pull
+		}
+	} else {
+		for i := 0; i < int(float32(len(events))*webhooksplit); i++ {
+			m := events[i].Payload.(map[string]interface{})
+			pull := m["pull_request"]
+			pulls[i] = pull
+		}
+		for i := int(float32(len(events)) * webhooksplit); i < len(events); i++ {
+			event := events[i]
+			b.WebhookEvents = append(b.WebhookEvents, &event)
+		}
+	}
+	payload, _ := json.Marshal(&pulls)
+	w.Write(payload)
+}
+
+func (b *BacktestServer) streamWebhooks(w http.ResponseWriter, r *http.Request) {
+	for i := 0; i < len(b.WebhookEvents); i++ {
+		m := b.WebhookEvents[i].Payload.(map[string]interface{})
+		m["repository"] = &b.WebhookEvents[i].Repo // Workaround
+		payload, _ := json.Marshal(m)
+		var event string
+		if b.WebhookEvents[i].Type == "PullRequestEvent" {
+			event = "pull_request"
+		} else {
+			event = "issues"
+		}
+		event = event
+		payload = payload
+		b.HTTPPost(bytes.NewBuffer(payload), event)
+	}
+}
+
+func (b *BacktestServer) StreamWebhookEvents() {
+	u := "stream"
+	req, err := b.gitClient.NewRequest("GET", u, nil)
+	if err != nil {
+		fmt.Println(err)
+	}
+	b.client.Do(req)
 }
 
 func (b *BacktestServer) HTTPPost(payload *bytes.Buffer, event string) {
