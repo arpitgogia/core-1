@@ -4,16 +4,16 @@ type Worker struct {
 	ID    int
 	Work  chan *RepoData
 	Queue chan chan *RepoData
-	Repos map[int]*ArchRepo
+	Repos *ActiveRepos
 	Quit  chan bool
 }
 
-func NewWorker(id int, queue chan chan *RepoData) Worker {
+func (bs *BackendServer) NewWorker(workerID int, queue chan chan *RepoData) Worker {
 	return Worker{
-		ID:    id,
+		ID:    workerID,
 		Work:  make(chan *RepoData),
 		Queue: queue,
-		Repos: make(map[int]*ArchRepo),
+		Repos: bs.Repos,
 		Quit:  make(chan bool),
 	}
 }
@@ -24,18 +24,27 @@ func (w *Worker) Start() {
 			w.Queue <- w.Work
 			select {
 			case repodata := <-w.Work:
+				w.Repos.Lock()
+
+				if w.Repos.Actives[repodata.RepoID] != nil {
+					// - Generate new ArchRepo + assign
+					// - Create new Client + assign
+					// - Add model to sub struct in ArchRepo
+				}
+
 				if len(repodata.Open) != 0 {
-					w.Repos[repodata.RepoID].Hive.Blender.Models[0].Conflator.SetIssueRequests(repodata.Open)
+					w.Repos.Actives[repodata.RepoID].Hive.Blender.Models[0].Conflator.SetIssueRequests(repodata.Open)
 				}
 				if len(repodata.Closed) != 0 {
-					w.Repos[repodata.RepoID].Hive.Blender.Models[0].Conflator.SetIssueRequests(repodata.Closed)
+					w.Repos.Actives[repodata.RepoID].Hive.Blender.Models[0].Conflator.SetIssueRequests(repodata.Closed)
 				}
 				if len(repodata.Pulls) != 0 {
-					w.Repos[repodata.RepoID].Hive.Blender.Models[0].Conflator.SetPullRequests(repodata.Pulls)
+					w.Repos.Actives[repodata.RepoID].Hive.Blender.Models[0].Conflator.SetPullRequests(repodata.Pulls)
 				}
-				w.Repos[repodata.RepoID].Hive.Blender.Models[0].Conflator.Conflate()
+				w.Repos.Actives[repodata.RepoID].Hive.Blender.Models[0].Conflator.Conflate()
 				// TODO: Call Learn/Predict.
-                // TODO: Add in Assignment call.
+				// TODO: Add in Assignment call.
+				w.Repos.Unlock()
 			case <-w.Quit:
 				return
 			}

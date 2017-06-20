@@ -1,16 +1,17 @@
 package backend
 
 import (
+	"context"
+
 	"github.com/google/go-github/github"
 )
 
-func AssignContributor(assignee string, issue github.IssuesEvent, client *github.Client) error {
-	// TODO: Logic to handle multiple assignees presented for the given issue.
-	// TODO: Error avoidance when an issue already has an assignee on it.
+func (bs *BackendServer) AssignContributor(assignee string, issue github.IssuesEvent) error {
 	owner := *issue.Repo.Owner.Login
 	repo := *issue.Repo.Name
+	repoID := *issue.Repo.ID
 	number := *issue.Issue.Number
-	_, _, err := client.Issues.AddAssignees(owner, repo, number, []string{assignee})
+	_, _, err := bs.Repos.Actives[repoID].Client.Issues.AddAssignees(context.Background(), owner, repo, number, []string{assignee})
 	if err != nil {
 		return err
 	}

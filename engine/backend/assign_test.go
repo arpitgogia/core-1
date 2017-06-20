@@ -1,29 +1,43 @@
 package backend
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/google/go-github/github"
-	"golang.org/x/oauth2"
 )
 
 func TestAssignContributor(t *testing.T) {
-	n := 12
-	o := "forstmeier"
-	r := "ihnil"
-	a := "forstmeier"
+	issueNumber := 63
+	repoOwner := "heupr"
+	repoID := 3
+	repoName := "test"
+	assignee := "forstmeier"
+	testURL := fmt.Sprintf("/repos/%v/%v/issues/%v/assignees", repoOwner, repoName, issueNumber)
 
-	user := github.User{Login: &o}
-	repo := github.Repository{Owner: &user, Name: &r}
-	issue := github.Issue{Number: &n}
+	mux := http.NewServeMux()
+	mux.HandleFunc(testURL, func(w http.ResponseWriter, r *http.Request) {})
+	server := httptest.NewServer(mux)
+	client := github.NewClient(nil)
+	url, _ := url.Parse(server.URL)
+	client.BaseURL = url
+	client.UploadURL = url
+
+	testBS := new(BackendServer)
+	testBS.Repos = new(ActiveRepos)
+	testBS.Repos.Actives = make(map[int]*ArchRepo)
+	testBS.Repos.Actives[repoID] = new(ArchRepo)
+	testBS.Repos.Actives[repoID].Client = client
+
+	user := github.User{Login: &repoOwner}
+	repo := github.Repository{ID: &repoID, Owner: &user, Name: &repoName}
+	issue := github.Issue{Number: &issueNumber}
 	issuesEvent := github.IssuesEvent{Issue: &issue, Repo: &repo}
 
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "b143196838e4d077475dc7ebc337d33de02c9ad3"})
-	tc := oauth2.NewClient(oauth2.NoContext, ts)
-	client := github.NewClient(tc)
-
-	err := AssignContributor(a, issuesEvent, client)
-	if err != nil {
+	if err := testBS.AssignContributor(assignee, issuesEvent); err != nil {
 		t.Error(err)
 	}
 }

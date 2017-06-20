@@ -1,19 +1,20 @@
 package backend
 
-import (
-	"github.com/google/go-github/github"
+import "testing"
 
-	"testing"
-)
+func TestNewModel(t *testing.T) {
+	repoID := 7
+	testBS := new(BackendServer)
+	testBS.Repos = new(ActiveRepos)
+	testBS.Repos.Actives = make(map[int]*ArchRepo)
+	testBS.Repos.Actives[repoID] = new(ArchRepo)
+	testBS.Repos.Actives[repoID].Hive = new(ArchHive)
+	testBS.Repos.Actives[repoID].Hive.Blender = new(Blender)
 
-func TestAddModel(t *testing.T) {
-	BackendServer := new(BackendServer)
-	id := 7
-	repo := &github.Repository{ID: &id}
-	if err := BackendServer.AddModel(repo); err != nil {
-		t.Error("Error adding model to the BackendServer")
+	if err := testBS.NewModel(repoID); err != nil {
+		t.Errorf("error adding model to test backendserver: %v", err)
 	}
-	if len(BackendServer.Repos[id].Hive.Blender.Models) == 0 {
-		t.Error("Model not added to Models slice on BackendServer")
+	if len(testBS.Repos.Actives[repoID].Hive.Blender.Models) == 0 {
+		t.Error("model not added to slice test backendserver")
 	}
 }

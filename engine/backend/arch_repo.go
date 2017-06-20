@@ -1,10 +1,13 @@
 package backend
 
 import (
+	"github.com/google/go-github/github"
+	"golang.org/x/oauth2"
+	ghoa "golang.org/x/oauth2/github"
+
+	// "coralreefci/engine/frontend"
 	"coralreefci/engine/gateway/conflation"
 	"coralreefci/models"
-
-	"github.com/google/go-github/github"
 )
 
 type ArchModel struct {
@@ -32,17 +35,32 @@ type ArchHive struct {
 }
 
 type ArchRepo struct {
-	Repo   *github.Repository
+	Repo   *github.Repository // NOTE: This is a deprediated field; remove.
 	Hive   *ArchHive
 	Client *github.Client
 }
 
-// func (bs *RepoServer) NewArchRepo(repo *github.Repository, client *github.Client) {
-// 	bs.Repos[*repo.ID] = &ArchRepo{
-// 		Repo:   repo,
-// 		Client: client,
-// 	}
-// }
+func (bs *BackendServer) NewArchRepo(repoID int) {
+	bs.Repos.Lock()
+	defer bs.Repos.Unlock()
+	bs.Repos.Actives[repoID] = &ArchRepo{Hive: &ArchHive{Blender: &Blender{}}}
+}
+
+func (bs *BackendServer) NewClient(repoID int, token *oauth2.Token) {
+	bs.Repos.Lock()
+	defer bs.Repos.Unlock()
+
+	oaConfig := &oauth2.Config{
+		ClientID:     "",
+		ClientSecret: "",
+		Endpoint:     ghoa.Endpoint,
+		Scopes:       []string{"admin:repo_hook", "repo:status", "public_repo"}, // NOTE: Scopes may be reduced (e.g. remove hook).
+	}
+
+	oaClient := oaConfig.Client(oauth2.NoContext, token)
+	client := github.NewClient(oaClient)
+	bs.Repos.Actives[repoID].Client = client
+}
 
 // TODO: Instantiate the Conflator struct on the ArchRepo.
 
