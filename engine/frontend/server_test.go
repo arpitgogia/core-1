@@ -1,7 +1,7 @@
 package frontend
 
-import "testing"
+import (
+	"testing"
+)
 
-func TestStart(t *testing.T) {
-
-}
+func TestStart(t *testing.T) {}

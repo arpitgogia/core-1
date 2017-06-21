@@ -1,10 +1,12 @@
 package frontend
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/boltdb/bolt"
+	"go.uber.org/zap"
+
+	"coralreefci/utils"
 )
 
 type FrontendServer struct {
@@ -23,20 +25,20 @@ func (fs *FrontendServer) routes() *http.ServeMux {
 
 func (fs *FrontendServer) Start() {
 	fs.Server = http.Server{Addr: "127.0.0.1:8080", Handler: fs.routes()}
-	// TODO: Add in logging and remove print statement.
-	err := fs.Server.ListenAndServe()
-	if err != nil {
-		fmt.Println(err)
+	if err := fs.Server.ListenAndServe(); err != nil {
+		utils.AppLog.Error("frontend server failed to start", zap.Error(err))
+		panic(err)
 	}
 }
 
 func (fs *FrontendServer) Stop() {
-	// TODO: Closing the server down is a needed operation that will be added.
+	// TODO: Implement graceful shutdown.
 }
 
 func (fs *FrontendServer) OpenBolt() error {
 	boltDB, err := bolt.Open("storage.db", 0644, nil)
 	if err != nil {
+		utils.AppLog.Error("failed opening bolt", zap.Error(err))
 		return err
 	}
 	fs.Database = BoltDB{DB: boltDB}
