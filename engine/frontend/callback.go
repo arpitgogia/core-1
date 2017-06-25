@@ -1,7 +1,6 @@
 package frontend
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -50,8 +49,6 @@ type Resources struct {
 	repos []*github.Repository
 }
 
-// TODO: Check to see that all of the specific redirects should in fact be
-//       pointing towards "/" instead of some other URL + handler.
 func (fs *FrontendServer) githubCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("state") != oaState {
 		http.Redirect(w, r, "/", http.StatusForbidden)
@@ -60,18 +57,12 @@ func (fs *FrontendServer) githubCallbackHandler(w http.ResponseWriter, r *http.R
 
 	token, err := oaConfig.Exchange(oauth2.NoContext, r.FormValue("code"))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Redirect(w, r, "/", http.StatusInternalServerError)
 		return
 	}
 
 	oaClient := oaConfig.Client(oauth2.NoContext, token)
 	client := github.NewClient(oaClient)
-
-	_, _, err = client.Users.Get(context.Background(), "")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 
 	repos, err := listRepositories(client)
 	if err != nil {
@@ -110,7 +101,10 @@ func (fs *FrontendServer) githubCallbackHandler(w http.ResponseWriter, r *http.R
 				return
 			}
 			// TODO: Build logic to send all repo IDs simultaneously via the POST request.
-			resp, err := http.PostForm("/activate-repos", url.Values{"state": {BackendSecret}, "repos": {string(*repo.ID)}})
+			resp, err := http.PostForm("/activate-repos", url.Values{
+				"state": {BackendSecret},
+				"repos": {string(*repo.ID)},
+			})
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
