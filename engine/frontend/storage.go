@@ -12,6 +12,22 @@ type BoltDB struct {
 	DB *bolt.DB
 }
 
+func (b *BoltDB) Initialize() error {
+	err := b.DB.Update(func(tx *bolt.Tx) error {
+		if _, err := tx.CreateBucketIfNotExists([]byte("token")); err != nil {
+			return err
+		}
+		if _, err := tx.CreateBucketIfNotExists([]byte("hook")); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (b *BoltDB) Store(name string, key int, value []byte) error {
 	byteName := []byte(name)
 	byteKey := []byte(strconv.Itoa(key))
