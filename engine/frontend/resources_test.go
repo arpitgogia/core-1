@@ -9,7 +9,7 @@ import (
 )
 
 func Test_listRepositories(t *testing.T) {
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "552cfadac27c94e91ce960c36cc3a1ee15fb134a"})
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "039f5f2f98a87f46abef10170866ed8ecf3b5b2d"})
 	tc := oauth2.NewClient(oauth2.NoContext, ts)
 	client := *github.NewClient(tc)
 
