@@ -2,20 +2,24 @@ package frontend
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/google/go-github/github"
+	"go.uber.org/zap"
+
+	"coralreefci/utils"
 )
 
 const secretKey = "figrin-dan-and-the-modal-nodes"
 
 func (fs *FrontendServer) NewHook(repo *github.Repository, client *github.Client) error {
 	if check, err := fs.hookExists(repo, client); check {
+		utils.AppLog.Error("previously added hook: ", zap.Error(err))
 		return err
 	}
 	name := *repo.Name
 	owner := *repo.Owner.Login
-	// TODO: This URL will change to a config parameter.
 	url := "http://00ad0ac7.ngrok.io/hook"
 	hook, _, err := client.Repositories.CreateHook(context.Background(), owner, name, &github.Hook{
 		Name:   github.String("web"),
@@ -29,9 +33,11 @@ func (fs *FrontendServer) NewHook(repo *github.Repository, client *github.Client
 		},
 	})
 	if err != nil {
+		utils.AppLog.Error("error adding new hook to repo: ", zap.Error(err))
 		return err
 	}
 	if err = fs.Database.Store("hook", *repo.ID, []byte(strconv.Itoa(*hook.ID))); err != nil {
+		utils.AppLog.Error("error storing hook info: ", zap.Error(err))
 		return err
 	}
 	return nil
@@ -45,16 +51,19 @@ func (fs *FrontendServer) hookExists(repo *github.Repository, client *github.Cli
 	}
 	hook, err := fs.Database.Retrieve("hook", *repo.ID)
 	if err != nil {
+		utils.AppLog.Error("error retrieving hook info: ", zap.Error(err))
 		return false, err
 	}
 
 	hookID, err := strconv.Atoi(string(hook))
 	if err != nil {
+		utils.AppLog.Error("failed string conversion: ", zap.Error(err))
 		return false, err
 	}
 	_, _, err = client.Repositories.GetHook(context.Background(), owner, name, hookID)
 	if err != nil {
+		utils.AppLog.Error("error getting GitHub hook info: ", zap.Error(err))
 		return false, err
 	}
-	return true, nil
+	return true, fmt.Errorf("hook previously established for repo %v", name)
 }
