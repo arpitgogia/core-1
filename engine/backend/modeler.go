@@ -7,6 +7,8 @@ import (
 )
 
 func (bs *BackendServer) NewModel(repoID int) error {
+	bs.Repos.Lock()
+	defer bs.Repos.Unlock()
 	context := &conflation.Context{}
 	scenarios := []conflation.Scenario{&conflation.Scenario2{}}
 	algos := []conflation.ConflationAlgorithm{
@@ -20,8 +22,6 @@ func (bs *BackendServer) NewModel(repoID int) error {
 		Context:              context,
 	}
 	model := models.Model{Algorithm: &bhattacharya.NBModel{}}
-	bs.Repos.Lock()
-	defer bs.Repos.Unlock()
 	bs.Repos.Actives[repoID].Hive.Blender.Models = append(bs.Repos.Actives[repoID].Hive.Blender.Models, &ArchModel{Model: &model, Conflator: &conflator})
 	return nil
 }

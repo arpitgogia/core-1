@@ -27,9 +27,8 @@ func (w *Worker) Start() {
 				w.Repos.Lock()
 
 				if w.Repos.Actives[repodata.RepoID] != nil {
-					// - Generate new ArchRepo + assign
-					// - Create new Client + assign
-					// - Add model to sub struct in ArchRepo
+					// Generate warning
+					// Exit loop / redirect back to initiate ArchRepo & etc.
 				}
 
 				if len(repodata.Open) != 0 {
@@ -42,8 +41,12 @@ func (w *Worker) Start() {
 					w.Repos.Actives[repodata.RepoID].Hive.Blender.Models[0].Conflator.SetPullRequests(repodata.Pulls)
 				}
 				w.Repos.Actives[repodata.RepoID].Hive.Blender.Models[0].Conflator.Conflate()
+
+				// w.Repos.Actives[repodata.RepoID].Hive.Blender.Models[0].Learn()
+
 				// TODO: Call Learn/Predict.
 				// TODO: Add in Assignment call.
+
 				w.Repos.Unlock()
 			case <-w.Quit:
 				return
