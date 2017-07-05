@@ -270,15 +270,16 @@ func (b *BacktestServer) streamWebhooks(w http.ResponseWriter, r *http.Request) 
 	for i := 0; i < len(b.WebhookEvents); i++ {
 		m := b.WebhookEvents[i].Payload.(map[string]interface{})
 		m["repository"] = &b.WebhookEvents[i].Repo // Workaround
-		payload, _ := json.Marshal(m)
 		var event string
 		if b.WebhookEvents[i].Type == "PullRequestEvent" {
 			event = "pull_request"
 		} else {
 			event = "issues"
+			m["action"] = "opened"
+			m["issue"].(map[string]interface{})["state"] = "open"
+			//m["issue"].(map[string]interface{})["closed_at"] = nil
 		}
-		event = event
-		payload = payload
+		payload, _ := json.Marshal(m)
 		b.HTTPPost(bytes.NewBuffer(payload), event)
 	}
 }

@@ -78,15 +78,15 @@ func (d *Database) BulkInsertBacktestEvents(events []*Event) {
 		buffer.AppendString(*events[i].Repo.Name)
 		buffer.AppendByte('~')
 		if events[i].Action == "closed" {
-			buffer.AppendInt(0)
-		} else {
 			buffer.AppendInt(1)
+		} else {
+			buffer.AppendInt(0)
 		}
 		buffer.AppendByte('~')
 		if events[i].Type == "PullRequestEvent" {
-			buffer.AppendInt(0)
-		} else {
 			buffer.AppendInt(1)
+		} else {
+			buffer.AppendInt(0)
 		}
 		buffer.AppendByte('~')
 		payload, _ := json.Marshal(events[i])
@@ -119,11 +119,14 @@ func (d *Database) ReadBacktestEvents(params EventQuery) ([]Event, error) {
 	var err error
 	switch t := params.Type; t {
 	case PullRequest:
-		results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_pull=?", params.Repo, 0)
+		results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_pull=? and is_closed=?", params.Repo, 0, 0)
+		//TODO: results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_pull=? and is_closed=?", params.Repo, 1, 1)
 	case Issue:
-		results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_pull=?", params.Repo, 1)
+		results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_pull=? and is_closed=?", params.Repo, 1, 0)
+		//TODO: results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_pull=? and is_closed=?", params.Repo, 0, 1)
 	default:
-		results, err = d.db.Query("select payload from backtest_events where repo_name=?", params.Repo)
+		results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_closed=?", params.Repo, 0)
+		//TODO: results, err = d.db.Query("select payload from backtest_events where repo_name=? and is_closed=?", params.Repo, 1)
 	}
 	if err != nil {
 		return nil, err
@@ -223,9 +226,9 @@ func (d *Database) BulkInsertIssues(issues []*github.Issue) {
 		buffer.AppendInt(0)
 		buffer.AppendByte('~')
 		if issues[i].ClosedAt == nil {
-			buffer.AppendInt(1)
-		} else {
 			buffer.AppendInt(0)
+		} else {
+			buffer.AppendInt(1)
 		}
 		buffer.AppendByte('\n')
 	}
@@ -249,19 +252,22 @@ func (d *Database) BulkInsertIssues(issues []*github.Issue) {
 
 func (d *Database) InsertPullRequest(pull github.PullRequest) {
 	var buffer bytes.Buffer
-	eventsInsert := "INSERT INTO github_events(payload,is_pull,is_closed) VALUES"
-	eventsValuesFmt := "(?,1,?)"
-	numValues := 2
+	eventsInsert := "INSERT INTO github_events(repo_id,issues_id,number,payload,is_pull,is_closed) VALUES"
+	eventsValuesFmt := "(?,?,?,?,1,?)"
+	numValues := 5
 
 	buffer.WriteString(eventsInsert)
 	buffer.WriteString(eventsValuesFmt)
 	values := make([]interface{}, numValues)
+	values[0] = pull.Base.Repo.ID
+	values[1] = pull.ID
+	values[2] = pull.Number
 	payload, _ := json.Marshal(pull)
-	values[0] = stripCtlAndExtFromBytes(payload)
+	values[3] = stripCtlAndExtFromBytes(payload)
 	if pull.ClosedAt == nil {
-		values[1] = false
+		values[4] = false
 	} else {
-		values[1] = true
+		values[4] = true
 	}
 	result, err := d.db.Exec(buffer.String(), values...)
 	if err != nil {
@@ -288,9 +294,9 @@ func (d *Database) BulkInsertPullRequests(pulls []*github.PullRequest) {
 		buffer.AppendInt(1)
 		buffer.AppendByte('~')
 		if pulls[i].ClosedAt == nil {
-			buffer.AppendInt(1)
-		} else {
 			buffer.AppendInt(0)
+		} else {
+			buffer.AppendInt(1)
 		}
 		buffer.AppendByte('\n')
 	}

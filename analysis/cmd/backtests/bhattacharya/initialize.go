@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 	//"runtime/debug"
+	"strings"
 )
 
 type TestContext struct {
@@ -22,7 +23,7 @@ type BackTestRunner struct {
 	Context TestContext
 }
 
-func (t *BackTestRunner) Run() {
+func (t *BackTestRunner) Run(repo string) {
 
 	defer func() {
 		//utils.Log.Error("Panic Recovered: ", recover(), bytes.NewBuffer(debug.Stack()).String())
@@ -31,14 +32,14 @@ func (t *BackTestRunner) Run() {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "23fc398670a80700b19b1ae1587825a16aa8ce57"})
 	tc := oauth2.NewClient(oauth2.NoContext, ts)
 	client := github.NewClient(tc)
-
 	newGateway := gateway.CachedGateway{Gateway: &gateway.Gateway{Client: client}, DiskCache: &gateway.DiskCache{}}
 
-	githubIssues, err := newGateway.GetIssues("dotnet", "corefx")
+	r := strings.Split(repo, "/")
+	githubIssues, err := newGateway.GetIssues(r[0], r[1])
 	if err != nil {
 		utils.AppLog.Error("Cannot get Issues from Github Gateway.", zap.Error(err))
 	}
-	githubPulls, err := newGateway.GetPullRequests("dotnet", "corefx")
+	githubPulls, err := newGateway.GetPullRequests(r[0], r[1])
 	if err != nil {
 		utils.AppLog.Error("Cannot get PullRequests from Github Gateway.", zap.Error(err))
 	}
@@ -46,7 +47,6 @@ func (t *BackTestRunner) Run() {
 	context := &conf.Context{}
 
 	scenarios := []conf.Scenario{&conf.Scenario3{}}
-	//scenarios := []conf.Scenario{&conf.ScenarioAND{Scenarios: []conf.Scenario{&conf.Scenario3{}}}}
 
 	conflationAlgorithms := []conf.ConflationAlgorithm{&conf.ComboAlgorithm{Context: context}}
 	normalizer := conf.Normalizer{Context: context}
@@ -62,7 +62,7 @@ func (t *BackTestRunner) Run() {
 	for i := 0; i < len(conflator.Context.Issues); i++ {
 		expandedIssue := conflator.Context.Issues[i]
 		if expandedIssue.Conflate {
-			if expandedIssue.Issue.Assignee == nil && expandedIssue.PullRequest.User == nil {
+			if expandedIssue.Issue.Assignees == nil {
 				continue
 			} else {
 				trainingSet = append(trainingSet, conflator.Context.Issues[i])
@@ -94,7 +94,7 @@ func (t *BackTestRunner) Run() {
 		})
 
 	where := groupby.Where(func(groupby interface{}) bool {
-		return len(groupby.(Group).Group) >= 28
+		return len(groupby.(Group).Group) >= 30
 	})
 
 	orderby := where.OrderByDescending(func(where interface{}) interface{} {
@@ -129,4 +129,7 @@ func (t *BackTestRunner) Run() {
 
 	scoreJohn := t.Context.Model.JohnFold(processedTrainingSet)
 	fmt.Println("John Fold:", scoreJohn)
+
+	//scoreTrain := t.Context.Model.TrainFold(processedTrainingSet, testIssues)
+	//fmt.Println("Train Fold:", scoreTrain)
 }

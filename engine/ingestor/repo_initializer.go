@@ -10,6 +10,10 @@ type RepoInitializer struct {
 	repos map[int]bool
 }
 
+func (r *RepoInitializer) LoadRepos() {
+
+}
+
 func (r *RepoInitializer) AddRepo(repo AuthenticatedRepo) {
 	bufferPool := NewPool()
 	db := Database{BufferPool: bufferPool}
