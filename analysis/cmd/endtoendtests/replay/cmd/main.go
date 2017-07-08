@@ -2,11 +2,12 @@ package main
 
 import (
 	"coralreefci/analysis/cmd/endtoendtests/replay"
+	"coralreefci/engine/backend"
 	"coralreefci/engine/ingestor"
-	"coralreefci/engine/onboarder/signup"
 	"flag"
 	"fmt"
 	"github.com/google/go-github/github"
+	"net/url"
 	"time"
 )
 
@@ -39,15 +40,29 @@ func main() {
 	}
 
 	if *runBacktestFlag {
-		repoServer := signup.RepoServer{}
-		go repoServer.Start()
+		backendServer := backend.BackendServer{}
+		client := github.NewClient(nil)
+		url, _ := url.Parse("http://localhost:8000/")
+		client.BaseURL = url
+		client.UploadURL = url
+
+		backendServer.Repos = new(backend.ActiveRepos)
+		backendServer.Repos.Actives = make(map[int]*backend.ArchRepo)
+		backendServer.Repos.Actives[26295345] = new(backend.ArchRepo)
+		backendServer.Repos.Actives[26295345].Hive = new(backend.ArchHive)
+		backendServer.Repos.Actives[26295345].Hive.Blender = new(backend.Blender)
+		backendServer.NewModel(26295345)
+		backendServer.Repos.Actives[26295345].Client = client
+		go backendServer.Start()
 
 		bs.AddRepo(26295345, "dotnet", "corefx")
 		bs.AddRepo(724712, "rust-lang", "rust")
 		bs.StreamWebhookEvents()
 		time.Sleep(15 * time.Second)
 
-		repo1 := &github.Repository{ID: github.Int(26295345), Organization: &github.Organization{Name: github.String("dotnet")}, Name: github.String("corefx")}
-		repoServer.AddModel(repo1)
+		backendServer.OpenSQL()
+		backendServer.Timer()
+
+		time.Sleep(15 * time.Second)
 	}
 }
