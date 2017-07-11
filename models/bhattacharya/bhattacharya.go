@@ -36,6 +36,10 @@ func (slice Results) Swap(i, j int) {
 	slice[i], slice[j] = slice[j], slice[i]
 }
 
+func (c *NBModel) IsBootstrapped() bool {
+	return c.classifier != nil
+}
+
 func (c *NBModel) Learn(input []conflation.ExpandedIssue) {
 	adjusted := c.converter(input...)
 

@@ -32,20 +32,18 @@ func (w *Worker) Start() {
 				}
 
 				if len(repodata.Open) != 0 {
-					w.Repos.Actives[repodata.RepoID].Hive.Blender.Models[0].Conflator.SetIssueRequests(repodata.Open)
+					w.Repos.Actives[repodata.RepoID].Hive.Blender.Conflator.SetIssueRequests(repodata.Open)
 				}
 				if len(repodata.Closed) != 0 {
-					w.Repos.Actives[repodata.RepoID].Hive.Blender.Models[0].Conflator.SetIssueRequests(repodata.Closed)
+					w.Repos.Actives[repodata.RepoID].Hive.Blender.Conflator.SetIssueRequests(repodata.Closed)
 				}
 				if len(repodata.Pulls) != 0 {
-					w.Repos.Actives[repodata.RepoID].Hive.Blender.Models[0].Conflator.SetPullRequests(repodata.Pulls)
+					w.Repos.Actives[repodata.RepoID].Hive.Blender.Conflator.SetPullRequests(repodata.Pulls)
 				}
-				w.Repos.Actives[repodata.RepoID].Hive.Blender.Models[0].Conflator.Conflate()
+				w.Repos.Actives[repodata.RepoID].Hive.Blender.Conflator.Conflate()
 
-				// w.Repos.Actives[repodata.RepoID].Hive.Blender.Models[0].Learn()
-
-				// TODO: Call Learn/Predict.
-				// TODO: Add in Assignment call.
+				w.Repos.Actives[repodata.RepoID].Hive.Blender.TrainModels()
+				w.Repos.Actives[repodata.RepoID].TriageOpenIssues()
 
 				w.Repos.Unlock()
 			case <-w.Quit:

@@ -9,12 +9,12 @@ import (
 )
 
 type ArchModel struct {
-	Model     *models.Model
-	Conflator *conflation.Conflator
+	Model *models.Model
 }
 
 type Blender struct {
-	Models []*ArchModel
+	Models    []*ArchModel
+	Conflator *conflation.Conflator //MVP: Moving the Conflator from ArchModel to Blender. We might just need to circle back to this.
 }
 
 type ArchHive struct {
@@ -65,3 +65,74 @@ func (bs *BackendServer) NewClient(repoID int, token *oauth2.Token) {
 
 	bs.Repos.Actives[repoID].Client = githubClient
 }
+
+func (a *ArchRepo) TriageOpenIssues() {
+	openIssues := a.Hive.Blender.GetOpenIssues()
+	for i := 0; i < len(a.Blender.Conflator.Issues); i++ {
+		assignees := a.Hive.Blender.Predict(openIssues[i])
+		openIssues[i].Issue.Triaged = true
+		//TODO: plug assignees into Github API
+	}
+}
+
+//TODO: Fix rudimentary implementation. Ok for MVP
+func (b *Blender) Predict(issue ExpandedIssue) {
+	var assignees []string
+	for i := 0; i < len(b.Models); i++ {
+		assignees = b.Models[i].Predict(issue)
+	}
+	return assignees
+}
+
+func (b *Blender) GetOpenIssues() []conflation.ExpandedIssue {
+	openIssues := []conflation.ExpandedIssue{}
+	issues := b.Conflator.Issues
+	for i := 0; i < len(issues); i++ {
+		if issues[i].Issue != nil && issues[i].Issue.ClosedAt == nil && !issues[i].Issue.Triaged {
+			openIssues = append(openIssues, issues[i])
+		}
+	}
+	return openIssues
+}
+
+func (b *Blender) GetClosedIssues() []conflation.ExpandedIssue {
+	closedIssues := []conflation.ExpandedIssue{}
+	issues := b.Conflator.Issues
+	for i := 0; i < len(issues); i++ {
+		if issues[i].Issue != nil && issues[i].Issue.ClosedAt != nil {
+			closedIssues = append(closedIssues, issues[i])
+		}
+	}
+	return closedIssues
+}
+
+func (b *Blender) TrainModels() {
+	closedIssues := b.GetClosedIssues()
+	for i := 0; i < len(b.Models); i++ {
+		if b.Models[i].IsBootstrapped() {
+			b.Models[i].OnlineLearn(closedIssues)
+		} else {
+			b.Models[i].Learn(closedIssues)
+		}
+	}
+}
+
+/*
+func (a *ArchRepo) TuneConflationScenarios() {
+	//This method will iterate over all models in the hive and call either Learn or OnlineLearn
+}
+
+func (a *ArchRepo) GetModelBenchmark() {
+ //Call this method before calling TriageOpenIssues.
+}
+
+//Every week we can generate a report that shows tossing graphs(pre) vs post signup
+func (a *ArchRepo) PreHeuprTossingGraphDepth() {
+	//For all Pre-Heupr assigned issues
+	//Calcuate avg,min,max tossing graph depth for each developer
+}
+
+func (a *ArchRepo) TossingGraphDepth() {
+	//For all Heupr assigned issues
+	//Calcuate avg,min,max tossing graph depth for each developer
+} */
