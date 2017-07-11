@@ -1,6 +1,8 @@
 package backend
 
 import (
+	"fmt"
+
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
 
@@ -14,8 +16,8 @@ type ArchModel struct {
 
 type Blender struct {
 	Models    []*ArchModel
-	Conflator *conflation.Conflator //MVP: Moving the Conflator from ArchModel to Blender. We might just need to circle back to this.
-}
+	Conflator *conflation.Conflator // MVP: Moving the Conflator from ArchModel
+} // to Blender. We might just need to circle back to this.
 
 type ArchHive struct {
 	Blender *Blender
@@ -44,12 +46,13 @@ func (bs *BackendServer) NewArchRepo(repoID int) {
 		Normalizer:           norm,
 		Context:              ctx,
 	}
-	model := ArchModel{Conflator: &conf}
+	model := ArchModel{}
 
 	bs.Repos.Actives[repoID] = &ArchRepo{
 		Hive: &ArchHive{
 			Blender: &Blender{
-				Models: []*ArchModel{&model},
+				Models:    []*ArchModel{&model},
+				Conflator: &conf,
 			},
 		},
 	}
@@ -68,27 +71,28 @@ func (bs *BackendServer) NewClient(repoID int, token *oauth2.Token) {
 
 func (a *ArchRepo) TriageOpenIssues() {
 	openIssues := a.Hive.Blender.GetOpenIssues()
-	for i := 0; i < len(a.Blender.Conflator.Issues); i++ {
+	for i := 0; i < len(a.Hive.Blender.Conflator.Context.Issues); i++ {
 		assignees := a.Hive.Blender.Predict(openIssues[i])
+		fmt.Println(assignees)
 		openIssues[i].Issue.Triaged = true
 		//TODO: plug assignees into Github API
 	}
 }
 
 //TODO: Fix rudimentary implementation. Ok for MVP
-func (b *Blender) Predict(issue ExpandedIssue) {
+func (b *Blender) Predict(issue conflation.ExpandedIssue) []string {
 	var assignees []string
 	for i := 0; i < len(b.Models); i++ {
-		assignees = b.Models[i].Predict(issue)
+		assignees = b.Models[i].Model.Predict(issue)
 	}
 	return assignees
 }
 
 func (b *Blender) GetOpenIssues() []conflation.ExpandedIssue {
 	openIssues := []conflation.ExpandedIssue{}
-	issues := b.Conflator.Issues
+	issues := b.Conflator.Context.Issues
 	for i := 0; i < len(issues); i++ {
-		if issues[i].Issue != nil && issues[i].Issue.ClosedAt == nil && !issues[i].Issue.Triaged {
+		if issues[i].Issue.ClosedAt == nil && !issues[i].Issue.Triaged {
 			openIssues = append(openIssues, issues[i])
 		}
 	}
@@ -97,9 +101,9 @@ func (b *Blender) GetOpenIssues() []conflation.ExpandedIssue {
 
 func (b *Blender) GetClosedIssues() []conflation.ExpandedIssue {
 	closedIssues := []conflation.ExpandedIssue{}
-	issues := b.Conflator.Issues
+	issues := b.Conflator.Context.Issues
 	for i := 0; i < len(issues); i++ {
-		if issues[i].Issue != nil && issues[i].Issue.ClosedAt != nil {
+		if issues[i].Issue.ClosedAt != nil {
 			closedIssues = append(closedIssues, issues[i])
 		}
 	}
@@ -109,10 +113,10 @@ func (b *Blender) GetClosedIssues() []conflation.ExpandedIssue {
 func (b *Blender) TrainModels() {
 	closedIssues := b.GetClosedIssues()
 	for i := 0; i < len(b.Models); i++ {
-		if b.Models[i].IsBootstrapped() {
-			b.Models[i].OnlineLearn(closedIssues)
+		if b.Models[i].Model.IsBootstrapped() {
+			b.Models[i].Model.OnlineLearn(closedIssues)
 		} else {
-			b.Models[i].Learn(closedIssues)
+			b.Models[i].Model.Learn(closedIssues)
 		}
 	}
 }

@@ -22,6 +22,7 @@ func (bs *BackendServer) NewModel(repoID int) error {
 		Context:              context,
 	}
 	model := models.Model{Algorithm: &bhattacharya.NBModel{}}
-	bs.Repos.Actives[repoID].Hive.Blender.Models = append(bs.Repos.Actives[repoID].Hive.Blender.Models, &ArchModel{Model: &model, Conflator: &conflator})
+	bs.Repos.Actives[repoID].Hive.Blender.Conflator = &conflator
+	bs.Repos.Actives[repoID].Hive.Blender.Models = append(bs.Repos.Actives[repoID].Hive.Blender.Models, &ArchModel{Model: &model})
 	return nil
 }
