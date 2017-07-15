@@ -1,5 +1,11 @@
 package backend
 
+import (
+	"go.uber.org/zap"
+
+	"coralreefci/utils"
+)
+
 type Worker struct {
 	ID    int
 	Work  chan *RepoData
@@ -27,8 +33,7 @@ func (w *Worker) Start() {
 				w.Repos.Lock()
 
 				if w.Repos.Actives[repodata.RepoID] != nil {
-					// Generate warning
-					// Exit loop / redirect back to initiate ArchRepo & etc.
+					utils.AppLog.Error("repo not initialized before worker start, repo ID: ", zap.Int("repoID", repodata.RepoID))
 				}
 
 				if len(repodata.Open) != 0 {
