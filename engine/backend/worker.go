@@ -1,7 +1,5 @@
 package backend
 
-import "fmt"
-
 type Worker struct {
 	ID    int
 	Work  chan *RepoData
@@ -23,12 +21,9 @@ func (bs *BackendServer) NewWorker(workerID int, queue chan chan *RepoData) Work
 func (w *Worker) Start() {
 	go func() {
 		for {
-			fmt.Println("AFTER FOR")
 			w.Queue <- w.Work
-			fmt.Println("QUEUED")
 			select {
 			case repodata := <-w.Work:
-				fmt.Println("WORK")
 				w.Repos.Lock()
 
 				if w.Repos.Actives[repodata.RepoID] != nil {
@@ -51,21 +46,15 @@ func (w *Worker) Start() {
 				w.Repos.Actives[repodata.RepoID].TriageOpenIssues()
 
 				w.Repos.Unlock()
-				fmt.Println("WORK COMPLETED")
-				continue //Try with this first. If this doesn't work then remove default: and try again
+				continue
 			case <-w.Quit:
-				fmt.Println("QUITTER")
 				return
-				// default:
-				//     fmt.Println("FALL THROUGH")
 			}
 		}
-		fmt.Println("AFTER GOROUTINE")
 	}()
 }
 
 func (w *Worker) Stop() {
-	fmt.Println("STOPPED")
 	go func() {
 		w.Quit <- true
 	}()
