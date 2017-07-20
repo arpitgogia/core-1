@@ -13,7 +13,8 @@ func Test_activationServerHandler(t *testing.T) {
 	http.HandleFunc(destinationEnd, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	go http.ListenAndServe(destinationPort, nil)
+	go http.ListenAndServe(destinationPorts[0], nil)
+	go http.ListenAndServe(destinationPorts[1], nil)
 
 	testAS := new(ActivationServer)
 
@@ -35,6 +36,7 @@ func Test_activationServerHandler(t *testing.T) {
 		req.Form = url.Values{}
 		req.Form.Set("state", secret.value)
 		req.Form.Set("repos", string(94))
+		req.Form.Set("token", "scum-and-villainy")
 
 		handler := http.HandlerFunc(testAS.activationServerHandler)
 		handler.ServeHTTP(rec, req)
@@ -42,7 +44,5 @@ func Test_activationServerHandler(t *testing.T) {
 		if received := rec.Code; received != secret.code {
 			t.Errorf("handler returning incorrect status code; received %v, expected %v", received, secret.code)
 		}
-		req.Form.Del("state")
-		req.Form.Del("repos")
 	}
 }

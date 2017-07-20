@@ -104,6 +104,7 @@ func (fs *FrontendServer) githubCallbackHandler(w http.ResponseWriter, r *http.R
 			resp, err := http.PostForm("/activate-repos", url.Values{
 				"state": {BackendSecret},
 				"repos": {string(*repo.ID)},
+				"token": {string(tokenByte)},
 			})
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)

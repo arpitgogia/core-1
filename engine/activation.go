@@ -8,10 +8,10 @@ import (
 	"coralreefci/utils"
 )
 
-const (
-	destinationBase = "http://127.0.0.1"
-	destinationPort = ":8090"
-	destinationEnd  = "/activate-repos-ingestor"
+var (
+	destinationBase  = "http://127.0.0.1"
+	destinationPorts = []string{":8020", ":8030"}
+	destinationEnd   = "/activate-repos-ingestor"
 )
 
 type ActivationServer struct {
@@ -26,17 +26,20 @@ func (as *ActivationServer) activationServerHandler(w http.ResponseWriter, r *ht
 		return
 	}
 	repoID := r.FormValue("repos")
-	resp, err := http.PostForm(destinationBase+destinationPort+destinationEnd, url.Values{
-		"state": {secret},
-		"repos": {repoID},
-	})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	} else {
-		defer resp.Body.Close()
+	token := r.FormValue("token")
+	for i := range destinationPorts {
+		resp, err := http.PostForm(destinationBase+destinationPorts[i]+destinationEnd, url.Values{
+			"state": {secret},
+			"repos": {repoID},
+			"token": {token},
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		} else {
+			defer resp.Body.Close()
+		}
 	}
-
 }
 
 func (as *ActivationServer) Start() {
@@ -44,7 +47,7 @@ func (as *ActivationServer) Start() {
 	mux.HandleFunc("/activate", as.activationServerHandler)
 
 	as.Server = http.Server{
-		Addr:    "127.0.0.1:8090",
+		Addr:    "127.0.0.1:8010",
 		Handler: mux,
 	}
 	as.Server.ListenAndServe()

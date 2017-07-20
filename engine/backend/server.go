@@ -39,24 +39,11 @@ func (bs *BackendServer) activateHandler(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
+	tokenString := r.FormValue("token")
 	if bs.Repos.Actives[repoID] == nil {
-		db, err := bolt.Open("../frontend/storage.db", 0644, nil)
-		if err != nil {
-			utils.AppLog.Error("backend storage access: ", zap.Error(err))
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		defer db.Close()
-
-		boltDB := frontend.BoltDB{DB: db}
-
-		byteToken, err := boltDB.Retrieve("token", repoID)
-		if err != nil {
-			utils.AppLog.Error("retrieving bulk data: ", zap.Error(err))
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
 		token := oauth2.Token{}
-		if err := json.Unmarshal(byteToken, &token); err != nil {
-			utils.AppLog.Error("converting stored tokens: ", zap.Error(err))
+		if err := json.Unmarshal([]byte(tokenString), &token); err != nil {
+			utils.AppLog.Error("converting tokens: ", zap.Error(err))
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		bs.NewArchRepo(repoID)
@@ -67,9 +54,9 @@ func (bs *BackendServer) activateHandler(w http.ResponseWriter, r *http.Request)
 
 func (bs *BackendServer) Start() {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/activate-repos", bs.activateHandler)
+	mux.HandleFunc("/activate-repos-ingestor", bs.activateHandler)
 	bs.Server = http.Server{
-		Addr:    "127.0.0.1:8080",
+		Addr:    "127.0.0.1:8020",
 		Handler: mux,
 	}
 	bs.Server.ListenAndServe()
