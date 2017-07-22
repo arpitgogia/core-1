@@ -29,14 +29,12 @@ type BackendServer struct {
 func (bs *BackendServer) activateHandler(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("state") != frontend.BackendSecret {
 		utils.AppLog.Error("failed validating frontend-backend secret")
-		http.Redirect(w, r, "/", http.StatusForbidden)
 		return
 	}
 	repoIDString := r.FormValue("repos")
 	repoID, err := strconv.Atoi(repoIDString)
 	if err != nil {
 		utils.AppLog.Error("converting repo ID: ", zap.Error(err))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
 	tokenString := r.FormValue("token")
@@ -44,7 +42,6 @@ func (bs *BackendServer) activateHandler(w http.ResponseWriter, r *http.Request)
 		token := oauth2.Token{}
 		if err := json.Unmarshal([]byte(tokenString), &token); err != nil {
 			utils.AppLog.Error("converting tokens: ", zap.Error(err))
-			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		bs.NewArchRepo(repoID)
 		bs.NewClient(repoID, &token)
@@ -71,8 +68,8 @@ func (bs *BackendServer) Start() {
 	boltDB := frontend.BoltDB{DB: db}
 
 	if err := boltDB.Initialize(); err != nil {
-		panic(err)
 		utils.AppLog.Error("frontend server: ", zap.Error(err))
+		panic(err)
 	}
 
 	keys, tokens, err := boltDB.RetrieveBulk("tokens")
@@ -114,8 +111,8 @@ func (bs *BackendServer) Timer() {
 		for range ticker.C {
 			data, err := bs.Database.Read()
 			if err != nil {
-				panic(err)
 				utils.AppLog.Error("backend timer method: ", zap.Error(err))
+				panic(err)
 			}
 			bs.Dispatcher(10)
 			Collector(data)

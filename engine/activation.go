@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/url"
 
+	"go.uber.org/zap"
+
 	"coralreefci/engine/frontend"
 	"coralreefci/utils"
 )
@@ -22,7 +24,7 @@ func (as *ActivationServer) activationServerHandler(w http.ResponseWriter, r *ht
 	secret := frontend.BackendSecret
 	if r.FormValue("state") != secret {
 		utils.AppLog.Error("failed validating frontend-backend secret")
-		http.Error(w, "invalid secret", http.StatusForbidden)
+		http.Error(w, "failed validating frontend-backend secret", http.StatusForbidden)
 		return
 	}
 	repoID := r.FormValue("repos")
@@ -34,7 +36,8 @@ func (as *ActivationServer) activationServerHandler(w http.ResponseWriter, r *ht
 			"token": {token},
 		})
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			utils.AppLog.Error("failed internal post call: ", zap.Error(err))
+			http.Error(w, "failed internal post call", http.StatusForbidden)
 			return
 		} else {
 			defer resp.Body.Close()
