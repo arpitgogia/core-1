@@ -24,16 +24,12 @@ type IngestorServer struct {
 
 func (i *IngestorServer) activateHandler(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("state") != frontend.BackendSecret {
-		utils.AppLog.Error("failed validating frontend-backend secret")
+		errMsg := "failed validating frontend-backend secret"
+		utils.AppLog.Error(errMsg)
+		http.Error(w, errMsg, 401)
 		return
 	}
 	repoInfo := r.FormValue("repos")
-	// repoID, err := strconv.Atoi(string(repoInfo[0]))
-	// if err != nil {
-	// 	utils.AppLog.Error("converting repo ID: ", zap.Error(err))
-	// 	http.Error(w, "failed converting repo ID", http.StatusForbidden)
-	// 	return
-	// }
 	owner := string(repoInfo[1])
 	repo := string(repoInfo[2])
 	tokenString := r.FormValue("token")
@@ -93,11 +89,11 @@ func (i *IngestorServer) activateHandler(w http.ResponseWriter, r *http.Request)
 func (i *IngestorServer) routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/hook", collectorHandler())
-	mux.HandleFunc("/activate-repos-ingestor", i.activateHandler)
+	mux.HandleFunc("/activate-ingestor-backend", i.activateHandler)
 	return mux
 }
 
-func (i *IngestorServer) Start() {
+func (i *IngestorServer) Start() error {
 	bufferPool := NewPool()
 	i.Database = Database{BufferPool: bufferPool}
 	i.Database.Open()
@@ -107,7 +103,9 @@ func (i *IngestorServer) Start() {
 	err := i.Server.ListenAndServe()
 	if err != nil {
 		utils.AppLog.Error("ingestor server failed to start; ", zap.Error(err))
+		return err
 	}
+	return nil
 }
 
 func tokenizer(tokenByte []byte) (*github.Client, error) {
